@@ -4,7 +4,7 @@
             <h4 class="mb-1">Cetak label QR aset</h4>
             <p class="text-muted mb-0">Pilih aset, atur ukuran label, lalu cetak. QR berisi nomor aset dan bisa dipindai saat stock opname.</p>
         </div>
-        <a href="{{ route('asset.opname') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-qr-scan me-1"></i>Stock opname</a>
+        @can('Stock Opname')<a href="{{ route('asset.opname') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-qr-scan me-1"></i>Stock opname</a>@endcan
     </div>
 
     <div class="row g-4">

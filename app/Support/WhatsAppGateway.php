@@ -120,9 +120,27 @@ class WhatsAppGateway
      *
      * @return array{base64: ?string, code: ?string, pairingCode: ?string}
      */
-    public static function connect(?string $phone = null): array
+    /** Karakter yang dipakai WhatsApp untuk kode pairing (Baileys CROCKFORD_CHARACTERS): tanpa 0, I, O, U. */
+    public const PAIRING_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTVWXYZ';
+
+    /** Kode pairing kustom: awalan 6 karakter (config) + 2 angka acak 1–9 = 8 karakter. */
+    public static function customPairingCode(): string
     {
-        $response = self::http(30)->get('/instance/connect/' . self::instance(), array_filter(['number' => $phone]));
+        $prefix = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', (string) config('services.whatsapp.pairing_prefix', 'MAM0RV')));
+        $prefix = substr(str_pad($prefix, 6, 'X'), 0, 6);
+
+        return $prefix . random_int(1, 9) . random_int(1, 9);
+    }
+
+    /** Karakter di kode yang tidak dikenal WhatsApp (mis. 0, O, U, I). */
+    public static function invalidPairingChars(string $code): array
+    {
+        return array_values(array_unique(array_filter(str_split(strtoupper($code)), fn ($c) => !str_contains(self::PAIRING_ALPHABET, $c))));
+    }
+
+    public static function connect(?string $phone = null, ?string $pairingCode = null): array
+    {
+        $response = self::http(30)->get('/instance/connect/' . self::instance(), array_filter(['number' => $phone, 'pairingCode' => $phone ? $pairingCode : null]));
         if (!$response->successful()) {
             throw self::fail('Meminta QR', $response);
         }

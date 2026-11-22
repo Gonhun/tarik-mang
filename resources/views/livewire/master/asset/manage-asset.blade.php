@@ -20,9 +20,9 @@
                 </p>
             </div>
             <div class="d-flex flex-wrap gap-2">
-                <a href="{{ route('asset.loans') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-time-five me-1"></i>Peminjaman</a>
-                <a href="{{ route('asset.opname') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-qr-scan me-1"></i>Stock opname</a>
-                <a href="{{ route('asset.labels', array_filter(['site' => $selectedJobsite, 'status' => $selectedStatus, 'q' => $search])) }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-printer me-1"></i>Cetak label</a>
+                @can('Peminjaman')<a href="{{ route('asset.loans') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-time-five me-1"></i>Peminjaman</a>@endcan
+                @can('Stock Opname')<a href="{{ route('asset.opname') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-qr-scan me-1"></i>Stock opname</a>@endcan
+                @can('Cetak Label')<a href="{{ route('asset.labels', array_filter(['site' => $selectedJobsite, 'status' => $selectedStatus, 'q' => $search])) }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-printer me-1"></i>Cetak label</a>@endcan
                 <button wire:click="exportExcel" wire:loading.attr="disabled" wire:target="exportExcel" class="btn btn-outline-success btn-sm">
                     <span wire:loading.remove wire:target="exportExcel"><i class="bx bx-bxs-file-export me-1"></i>Ekspor Excel</span>
                     <span wire:loading wire:target="exportExcel"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengekspor...</span>

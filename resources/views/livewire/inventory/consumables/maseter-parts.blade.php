@@ -1,5 +1,10 @@
-<div class="container-fluid">
-    <h4 class="mb-4">Master Part Number (Katalog Part)</h4>
+<div class="container-fluid py-4">
+    <div class="page-header">
+      <div>
+        <h4 class="mb-1">Master Part Number</h4>
+        <div class="page-subtitle">Katalog part dan consumable.</div>
+      </div>
+    </div>
 
     <div class="card shadow-sm">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -21,7 +26,7 @@
             
             {{-- Tombol Tambah --}}
             <button class="btn btn-primary btn-sm" wire:click="openCreateModal">
-                <i class="fas fa-plus"></i> Tambah Part Baru
+                <i class="bx bx-plus"></i> Tambah Part Baru
             </button>
         </div>
 
@@ -53,10 +58,10 @@
                                 </td>
                                 <td class="text-center">
                                     <button class="btn btn-sm btn-info me-1" wire:click="edit({{ $part->id }})">
-                                        <i class="fas fa-edit"></i> Edit
+                                        <i class="bx bx-edit"></i> Edit
                                     </button>
                                     <button class="btn btn-sm btn-danger" wire:click="delete({{ $part->id }})" wire:confirm="Apakah Anda yakin ingin menghapus part ini?">
-                                        <i class="fas fa-trash"></i> Hapus
+                                        <i class="bx bx-trash"></i> Hapus
                                     </button>
                                 </td>
                             </tr>
@@ -129,7 +134,7 @@
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" wire:click="$set('showModal', false)">Batal</button>
                         <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-save"></i> Simpan
+                            <i class="bx bx-save"></i> Simpan
                         </button>
                     </div>
                 </form>

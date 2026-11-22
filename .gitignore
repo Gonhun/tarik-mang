@@ -21,3 +21,6 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+
+# Upload dari aplikasi (gambar halaman login, dll.)
+/public/uploads

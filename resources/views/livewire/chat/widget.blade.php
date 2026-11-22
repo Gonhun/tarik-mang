@@ -6,10 +6,9 @@
                         bottom: 24px;
                         right: 24px;
                         z-index: 1000;
-                        border-radius: 18px;
-                        box-shadow: 0 8px 32px rgba(0,0,0,0.18);
-                        background: rgba(255,255,255,0.95);
-                        transition: box-shadow 0.2s, background 0.2s;
+                        /* Wadah transparan: kartu chat punya latar & bayangan sendiri.
+                           Dulu latar putih wadah tampil sebagai panel kosong saat chat tertutup. */
+                        background: transparent;
                         overflow: visible;
                         min-width: 0;
                     }
@@ -178,6 +177,20 @@
                             bottom: 2vw !important;
                         }
                     }
+                    .chat-launcher { display: inline-flex; align-items: center; gap: .4rem; height: 52px; padding: 0 1.1rem 0 .9rem; border: 0; border-radius: 26px;
+                        color: #fff; font-weight: 600; background: linear-gradient(135deg, #6366f1 0%, #60a5fa 100%); box-shadow: 0 .5rem 1.5rem rgba(99,102,241,.35);
+                        transition: transform .15s, box-shadow .15s; }
+                    .chat-launcher:hover { transform: translateY(-2px); box-shadow: 0 .75rem 1.75rem rgba(99,102,241,.45); }
+                    .chat-launcher i { font-size: 1.6rem; }
+                    @media (max-width: 575.98px) { .chat-launcher { width: 52px; padding: 0; justify-content: center; } .chat-launcher__label { display: none; } }
+                    .chat-md p { margin-bottom: .4rem; } .chat-md p:last-child { margin-bottom: 0; }
+                    .chat-md ul, .chat-md ol { padding-left: 1.1rem; margin-bottom: .4rem; }
+                    .chat-md table { font-size: .75rem; border-collapse: collapse; margin: .25rem 0; display: block; overflow-x: auto; max-width: 100%; }
+                    .chat-md th, .chat-md td { border: 1px solid #e5e7eb; padding: .2rem .4rem; white-space: nowrap; }
+                    .chat-md code { font-size: .8em; }
+                    .chat-file { display: flex; align-items: center; gap: .6rem; padding: .5rem .6rem; border: 1px solid #e5e7eb; border-radius: .6rem; background: #fff; color: inherit; text-decoration: none; min-width: 220px; }
+                    .chat-file:hover { border-color: #6366f1; }
+                    .chat-file > i:first-child { font-size: 1.8rem; }
                 </style>
                 @if ($isOpen)
                     <div class="chat-widget-modern-card shadow">
@@ -186,18 +199,37 @@
                                 <span class="avatar me-2" style="background: #fff;">
                                     <img src="{{ asset('assets/img/LogoBSS.png') }}" alt="Bot" style="width: 24px; height: 24px;">
                                 </span>
-                                <span>Virtual Assistant</span>
+                                <span class="lh-sm">Asisten AMS<small class="d-block" style="font-size:.7rem;opacity:.85">Jawaban sesuai akses Anda</small></span>
                             </div>
-                            <button wire:click="toggleChat" type="button" class="chat-widget-modern-close" aria-label="Close">
-                                <i class="bx bx-x"></i>
-                            </button>
+                            <div class="d-flex align-items-center gap-1">
+                                <button wire:click="newConversation" type="button" class="chat-widget-modern-close" title="Percakapan baru" aria-label="Percakapan baru">
+                                    <i class="bx bx-message-add"></i>
+                                </button>
+                                <button wire:click="toggleChat" type="button" class="chat-widget-modern-close" aria-label="Tutup">
+                                    <i class="bx bx-x"></i>
+                                </button>
+                            </div>
                         </div>
                         <div id="chat-box-messages" class="chat-widget-modern-body d-flex flex-column">
                           
                             @forelse ($messages as $msg)
                                 <div class="d-flex {{ $msg['sender_type'] == 'user' ? 'justify-content-end' : 'justify-content-start' }}">
                                     <div class="chat-widget-modern-message {{ $msg['sender_type'] == 'user' ? 'user' : 'bot' }}">
-                                        @if ($msg['message_type'] == 'text')
+                                        @php $isFileMsg = ($msg['metadata']['kind'] ?? null) === 'file'; @endphp
+                                        @if ($isFileMsg)
+                                            @php $isPdf = str_ends_with(strtolower($msg['file_name'] ?? ''), '.pdf'); @endphp
+                                            <a href="{{ route('chat.file', $msg['id']) }}" class="chat-file" target="_blank" rel="noopener">
+                                                <i class="bx {{ $isPdf ? 'bxs-file-pdf text-danger' : 'bxs-spreadsheet text-success' }}"></i>
+                                                <span class="min-w-0">
+                                                    <span class="d-block text-truncate fw-medium">{{ $msg['file_name'] }}</span>
+                                                    <small class="text-body-secondary">{{ $isPdf ? 'PDF' : 'Excel' }} · {{ number_format(($msg['metadata']['size'] ?? 0) / 1024, 0) }} KB · klik untuk unduh</small>
+                                                </span>
+                                                <i class="bx bx-download ms-auto"></i>
+                                            </a>
+                                        @elseif ($msg['message_type'] == 'text' && $msg['sender_type'] == 'bot')
+                                            {{-- Markdown dengan HTML di-escape (aman dari skrip). --}}
+                                            <div class="chat-md">{!! \Illuminate\Support\Str::markdown((string) $msg['content'], ['html_input' => 'escape', 'allow_unsafe_links' => false]) !!}</div>
+                                        @elseif ($msg['message_type'] == 'text')
                                             <p class="mb-0">{!! nl2br(e($msg['content'])) !!}</p>
                                         @elseif ($msg['message_type'] == 'image' && $msg['file_path'])
                                             <a href="{{ Storage::url($msg['file_path']) }}" target="_blank" title="{{ $msg['file_name'] }}">
@@ -213,18 +245,25 @@
                                     </div>
                                 </div>
                             @empty
-                                <p class="text-center text-muted">Mulai percakapan...</p>
+                                <div class="text-center text-muted small px-2">
+                                    <i class="bx bx-bot fs-1 d-block mb-1 text-primary"></i>
+                                    Halo {{ \Illuminate\Support\Str::of(auth()->user()->name)->explode(' ')->first() }}! Tanyakan soal aset, pengajuan, atau persetujuan Anda.
+                                    Hasil bisa saya kirim sebagai <b>PDF</b> atau <b>Excel</b>.
+                                    <div class="d-flex flex-column gap-1 mt-3">
+                                        @foreach ($suggestions as $sg)
+                                            <button type="button" class="btn btn-sm btn-outline-primary text-start" wire:click="ask(@js($sg))">{{ $sg }}</button>
+                                        @endforeach
+                                    </div>
+                                </div>
                             @endforelse
-                            @if($isLoadingResponse)
-                                <div class="d-flex justify-content-start">
+                            <div wire:loading.flex wire:target="sendMessage,ask" class="justify-content-start">
                                     <div class="chat-widget-modern-message bot chat-widget-modern-typing">
                                         <span>
-                                            <span class="me-1">Bot sedang mengetik</span>
+                                            <span class="me-1">Asisten sedang mencari data</span>
                                             <span class="spinner-grow spinner-grow-sm align-middle" style="width: 0.8em; height: 0.8em;"></span>
                                         </span>
                                     </div>
-                                </div>
-                            @endif
+                            </div>
                         </div>
                         <div class="chat-widget-modern-footer">
                             <form wire:submit.prevent="sendMessage" id="chatForm" autocomplete="off">
@@ -235,7 +274,7 @@
                                     </div>
                                 @endif
                                 <div class="chat-widget-modern-input-group">
-                                    <input wire:model.defer="newMessage" type="text" class="chat-widget-modern-input" placeholder="Ketik pesan..." @if($isLoadingResponse) disabled @endif>
+                                    <input wire:model.defer="newMessage" type="text" class="chat-widget-modern-input" placeholder="Tanya soal aset, pengajuan, persetujuan…" maxlength="1000" wire:loading.attr="disabled" wire:target="sendMessage,ask">
                                     <label for="chatFileAttachment" class="chat-widget-modern-attach" data-bs-toggle="tooltip" title="Kirim Gambar">
                                         <i class="bx bx-paperclip"></i>
                                         <div wire:loading wire:target="newFile" class="spinner-border spinner-border-sm text-primary ms-1" role="status" style="width: 1em; height: 1em;">
@@ -243,7 +282,7 @@
                                         </div>
                                     </label>
                                     <input type="file" wire:model="newFile" id="chatFileAttachment" style="display: none;" accept="image/*">
-                                    <button type="submit" class="chat-widget-modern-send" @if($isLoadingResponse) disabled @endif>
+                                    <button type="submit" class="chat-widget-modern-send" wire:loading.attr="disabled" wire:target="sendMessage,ask,newFile">
                                         <span wire:loading.remove wire:target="sendMessage, newFile"><i class="bx bx-send"></i></span>
                                         <span wire:loading wire:target="sendMessage, newFile">
                                             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -256,8 +295,9 @@
                         </div>
                     </div>
                 @else
-                    <button wire:click="toggleChat" class="btn btn-primary rounded-circle shadow d-flex align-items-center justify-content-center" style="width: 64px; height: 64px; font-size: 2rem; background: linear-gradient(135deg, #6366f1 0%, #60a5fa 100%);" data-bs-toggle="tooltip" title="Buka Chat">
-                        <i class="bx bx-message-dots"></i>
+                    <button wire:click="toggleChat" type="button" class="chat-launcher" title="Asisten AMS" aria-label="Buka Asisten AMS">
+                        <i class="bx bx-bot"></i>
+                        <span class="chat-launcher__label">Asisten</span>
                     </button>
                 @endif
             </div>

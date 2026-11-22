@@ -1,10 +1,12 @@
 <div>
     <div class="container-fluid py-4">
-        <div class="card-header">
-            <h5 class="mb-0">Proses Pengadaan - Input Purchase Order (PO)</h5>
-            <p class="text-sm mb-0">Halaman ini berisi daftar pengajuan yang siap untuk diinput Nomor PO-nya.</p>
-        </div>
-        <div class="card-body">
+        <div class="page-header">
+      <div>
+        <h4 class="mb-1">Purchase Order</h4>
+        <div class="page-subtitle">Halaman ini berisi daftar pengajuan yang siap untuk diinput Nomor PO-nya.</div>
+      </div>
+    </div>
+    <div>
             @if (session()->has('global-message'))
                 <div class="alert alert-success" role="alert">
                     {{ session('global-message') }}
@@ -28,13 +30,13 @@
                                 <table id="myTable" class="table table-hover align-items-center mb-0">
                                     <thead class="bg-light">
                                         <tr>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-3">No. Pengajuan</th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Items</th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Quantity</th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">
+                                            <th>No. Pengajuan</th>
+                                            <th>Items</th>
+                                            <th>Quantity</th>
+                                            <th>
                                                 <span class="d-flex align-items-center gap-2">
                                                     <span>
-                                                        <i class="fas fa-file-signature text-primary me-1"></i> 
+                                                        <i class="bx bx-file text-primary me-1"></i> 
                                                         <span class="fw-bold">No. PR</span>
                                                     </span>
                                                     <button 
@@ -48,9 +50,9 @@
                                                     </button>
                                                 </span>
                                             </th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">No Asset</th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">PO</th>
-                                            <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">GR</th>
+                                            <th>No Asset</th>
+                                            <th>PO</th>
+                                            <th>GR</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -60,21 +62,21 @@
                                                 <td>
                                                     <div class="d-flex px-3 py-1">
                                                         <div class="d-flex flex-column justify-content-center">
-                                                            <h6 class="mb-0 text-sm">{{ $request->request_number }}</h6>
+                                                            <span class="fw-medium text-heading">{{ $request->request_number }}</span>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <p class="text-xs font-weight-bold mb-0 px-2">{{ $item->assetSeries->name ?? '-' }}</p>
+                                                    {{ $item->assetSeries->name ?? '-' }}
                                                 </td>
                                                 <td>
                                                     <span class="badge badge-sm bg-gradient-success px-3 py-2">{{ $item->quantity }}</span>
                                                 </td>
                                                 <td>
-                                                    <p class="text-xs font-weight-bold mb-0 px-2">{{ $item->pr_number }}</p>
+                                                    {{ $item->pr_number }}
                                                 </td>
                                                 <td>
-                                                    <p class="text-xs font-weight-bold mb-0 px-2">{{ $item->accounting_number }}</p>
+                                                    {{ $item->accounting_number }}
                                                 </td>
                                                 <td>
                                                     @if($item->po_number)
@@ -96,7 +98,7 @@
                                             <tr>
                                                 <td colspan="6" class="text-center py-4">
                                                     <div class="d-flex flex-column align-items-center">
-                                                        <i class="fas fa-inbox fa-2x text-secondary mb-2"></i>
+                                                        <i class="bx bx-archive fa-2x text-secondary mb-2"></i>
                                                         <p class="text-muted mb-0">Anda belum memiliki pengajuan aset.</p>
                                                     </div>
                                                 </td>

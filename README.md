@@ -77,6 +77,7 @@ Migrasi yang sudah dijalankan di produksi lewat `--path`:
 |---|---|
 | `2026_11_22_120000_create_stock_opname_tables.php` | Tabel `stock_opnames` & `stock_opname_items` |
 | `2026_11_22_150000_create_fortigate_devices_table.php` | Tabel `fortigate_devices`; Fortigate dari `.env` otomatis dipindahkan sebagai perangkat pertama |
+| `2026_11_22_170000_add_asset_feature_permissions.php` | Permission QC Aset, Peminjaman, Kerusakan Aset, Stock Opname, Cetak Label; diberikan ke role yang punya Master Asset |
 
 Migrasi lama yang masih pending: `master_pivots`, `master_forecasts`, `software_licenses_details`, `isr_billings`, `softwares`, `materials`, `audits`. Akibatnya halaman `/software`, `/licenses`, dan `/coa` error 500 sampai tabelnya dibuat. Periksa dulu apakah tabel tersebut sudah ada dengan nama lain sebelum menjalankannya.
 
@@ -110,14 +111,20 @@ Kelola di **Administrasi → Integrasi → Fortigate** (permission `Fortigate`).
 
 | Permission | Akses |
 |---|---|
-| `Master Asset` | Inventaris, QC, peminjaman, kerusakan, stock opname, label QR, COA |
+| `Master Asset` | Inventaris aset (BAST, pengembalian, inspeksi), master COA & forecast, inventory parts |
+| `Edit Inventaris` | Tombol ubah data aset |
+| `QC Aset`, `Peminjaman`, `Kerusakan Aset`, `Stock Opname`, `Cetak Label` | Masing-masing satu fitur aset |
 | `Mutasi` | Mutasi dan disposal |
 | `Manajement Request` | PR, PO, retur QC |
 | `Lisensi` | Lisensi & software |
 | `Add User`, `Add Permissions` | Pengguna, role & permission |
 | `Add Workflow` | Workflow validasi & jenis transaksi |
-| `Whatsapp`, `Fortigate` | Halaman integrasi |
+| `Whatsapp`, `Fortigate`, `Isr` | Halaman integrasi |
 | `Logs` | Audit log |
+
+Tanpa permission (semua user login): dashboard, aset saya, profil, permintaan aset, dan permintaan lisensi. Detail dan PDF permintaan hanya untuk pengaju, approver, dan admin. Detail aset hanya untuk pengelola aset, pemegang, atau user yang pernah terlibat di transaksinya. Halaman Task, Maps, dan Tetris hanya untuk tim IT.
+
+Daftar lengkap beserta keterangannya ada di `config/permissions.php` dan di halaman **Role & Permission**. Permission yang tercatat di sana dipakai di kode, jadi namanya terkunci.
 
 Jenis transaksi untuk workflow diatur di `config/transaction_types.php` (tanpa tabel). Transaksi akan ditolak dengan pesan jelas bila workflow untuk jenis, jobsite, dan jabatan terkait belum diatur.
 

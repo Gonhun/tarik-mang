@@ -83,8 +83,22 @@ class AppServiceProvider extends ServiceProvider
         // Halaman master tiket (kategori/subkategori): hanya tim IT.
         Gate::define('it-staff', fn (User $user) => $user->isItStaff() || $user->hasRole(self::ADMIN_ROLES));
 
+        // Lihat detail aset: pengelola aset, pemegang saat ini, atau user yang pernah terlibat di transaksinya.
+        Gate::define('view-asset', function (User $user, \App\Models\Asset $asset) {
+            if ($user->can('Master Asset') || $user->can('Mutasi') || $user->isItStaff() || $user->hasRole(self::ADMIN_ROLES)) {
+                return true;
+            }
+            if ((int) $asset->holder_user_id === $user->id) {
+                return true;
+            }
+
+            return $asset->transactions()
+                ->where(fn ($q) => $q->where('from_user_id', $user->id)->orWhere('to_user_id', $user->id))
+                ->exists();
+        });
+
         // Cetak label aset: pengelola aset atau pemegang aset.
-        Gate::define('print-asset-label', fn (User $user, \App\Models\Asset $asset) => $user->can('Master Asset')
+        Gate::define('print-asset-label', fn (User $user, \App\Models\Asset $asset) => $user->can('Cetak Label') || $user->can('Master Asset')
             || $user->hasRole(self::ADMIN_ROLES)
             || (int) $asset->holder_user_id === $user->id);
 

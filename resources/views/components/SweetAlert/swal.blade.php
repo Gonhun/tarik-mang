@@ -15,7 +15,7 @@
                     </span>`,
             html: `
                 <div style="font-size:1.08em;margin-bottom:10px;animation: shake 0.7s;">
-                    <i class="fa fa-exclamation-triangle" style="color:#e74c3c;font-size:2em;animation: pulse 1.2s infinite alternate;"></i>
+                    <i class="bx bx-error" style="color:#e74c3c;font-size:2em;animation: pulse 1.2s infinite alternate;"></i>
                     <p style="margin-top:10px;font-weight:500;">${detail.text}</p>
                 </div>
                 <div style="margin-top:18px;">
@@ -66,7 +66,7 @@
         }
         Swal.fire({
             title: `<span style="color:#e67e22;font-weight:bold;letter-spacing:1px;text-shadow:1px 2px 6px #ffe5b4;">
-                        <i class="fa fa-exclamation-circle" style="color:#e67e22;font-size:1.2em;margin-right:7px;animation: swing 1s infinite alternate;"></i>
+                        <i class="bx bx-error-circle" style="color:#e67e22;font-size:1.2em;margin-right:7px;animation: swing 1s infinite alternate;"></i>
                         ${detail.title}
                     </span>`,
             html: `
@@ -131,7 +131,7 @@
         }
         Swal.fire({
             title: `<span style="color:#3498db;font-weight:bold;letter-spacing:1px;text-shadow:1px 2px 6px #d6eaff;">
-                        <i class="fa fa-question-circle" style="color:#3498db;font-size:1.2em;margin-right:7px;animation: swing 1s infinite alternate;"></i>
+                        <i class="bx bx-help-circle" style="color:#3498db;font-size:1.2em;margin-right:7px;animation: swing 1s infinite alternate;"></i>
                         ${detail.title}
                     </span>`,
             html: `
@@ -197,7 +197,7 @@
         Swal.fire({
             icon: 'success',
             title: `<span style="color:#30D630;font-weight:bold;letter-spacing:1px;text-shadow:1px 2px 6px #baffb4;">
-                        <i class="fa fa-check-circle" style="color:#30D630;font-size:1.2em;margin-right:7px;animation: pop 0.7s;"></i>
+                        <i class="bx bx-check-circle" style="color:#30D630;font-size:1.2em;margin-right:7px;animation: pop 0.7s;"></i>
                         ${detail.title}
                     </span>`,
             html: `

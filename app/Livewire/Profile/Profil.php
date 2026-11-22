@@ -92,15 +92,15 @@ class Profil extends Component
     // }
     private function loadUsersForManagerSelection()
     {
-        $query = User::orderBy('name');
-        // Saat mengedit, kecualikan diri sendiri dari daftar calon atasan
-       
-            $query->where('id', '!=', Auth::id())
-                  ->whereHas('position', function($q) {
-                      $q->where('name', 'not like', '%Staff%');
-                  });
-        
-        $this->usersForManagerSelection = $query->get(['id', 'name', 'nik','department_id','position_id']);
+        // Calon atasan: user ber-level "Kepala …" (sama dengan form admin), plus atasan saat ini.
+        $currentManager = Auth::user()->manager_id;
+        $this->usersForManagerSelection = User::query()
+            ->where('id', '!=', Auth::id())
+            ->where(fn ($q) => $q->whereHas('positionLevel', fn ($l) => $l->where('name', 'like', 'Kepala %'))
+                ->when($currentManager, fn ($w) => $w->orWhere('id', $currentManager)))
+            ->with(['department:id,code', 'position:id,name'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'nik', 'department_id', 'position_id']);
     }
     public function store()
     {
@@ -153,17 +153,7 @@ class Profil extends Component
         $this->loadUsersForManagerSelection();
         $this->manager_id = $this->users->manager_id;
 
-        $users = User::with('position:id,name')->get(['id', 'name', 'manager_id', 'position_id']);
-
-        // Kelompokkan pengguna berdasarkan ID atasan (manager_id) mereka
-        // Pengguna tanpa atasan akan dikelompokkan di bawah kunci null atau ''
-        $usersByManager = $users->groupBy('manager_id');
-
-        // Panggil fungsi rekursif untuk membangun struktur pohon
-        // Kita mulai dari level teratas (pengguna tanpa atasan, di mana manager_id adalah null)
-        $this->chartData = $this->buildTree(null, $usersByManager);
-        
-       
+        // Struktur organisasi punya halamannya sendiri (organization-chart); tidak dimuat di sini.
     }
     private function buildTree($managerId, $usersByManager)
     {

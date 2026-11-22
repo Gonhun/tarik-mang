@@ -2,16 +2,13 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Manajemen Jobsite</h5>
-                            {{-- Tombol untuk memunculkan modal form tambah jobsite --}}
-                            <button wire:click="create()" class="btn btn-primary btn-sm">
-                                <i class="fas fa-plus me-1"></i> Tambah Jobsite Baru
-                            </button>
-                        </div>
-                        @if (session()->has('message'))
+                <div class="page-header">
+            <div><h4 class="mb-1">Jobsite</h4></div>
+            <div class="d-flex flex-wrap gap-2"><button wire:click="create()" class="btn btn-primary btn-sm">
+                                <i class="bx bx-plus me-1"></i> Tambah Jobsite Baru
+                            </button></div>
+        </div>
+@if (session()->has('message'))
                             <div class="alert alert-success mt-3" role="alert">
                                 {{ session('message') }}
                             </div>
@@ -21,30 +18,28 @@
                                 {{ session('error') }}
                             </div>
                         @endif
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
+        <div class="card">
+            <div class="card-body px-0 pt-0 pb-2">
                         {{-- Bagian untuk menampilkan daftar jobsite (opsional jika hanya fokus form tambah) --}}
                         {{-- Jika Anda ingin menampilkan daftar, tambahkan tabel di sini --}}
                         {{-- Contoh: --}}
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari jobsite...">
-                        </div>
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari jobsite..."></div></div>
                         <div class="table-responsive p-0 mt-3">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Kode</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Nama Jobsite</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Lokasi</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th>Kode</th>
+                                        <th>Nama Jobsite</th>
+                                        <th>Lokasi</th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($jobsites as $jobsite)
                                         <tr>
-                                            <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $jobsite->code }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $jobsite->name }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ Str::limit($jobsite->location, 70) }}</p></td>
+                                            <td>{{ $jobsite->code }}</td>
+                                            <td>{{ $jobsite->name }}</td>
+                                            <td>{{ Str::limit($jobsite->location, 70) }}</td>
                                             <td class="align-middle text-end">
                                                 <button wire:click="edit({{ $jobsite->id }})" class="btn btn-link text-secondary mb-0 p-1" data-bs-toggle="tooltip" title="Edit Jobsite">
                                                     <i class="bx bx-edit text-sm"></i>
@@ -52,7 +47,7 @@
                                                 {{-- <button wire:click="delete({{ $jobsite->id }})"
                                                         wire:confirm="Apakah Anda yakin ingin menghapus jobsite ini: {{ $jobsite->code }} - {{ $jobsite->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Jobsite">
-                                                    <i class="far fa-trash-alt text-sm"></i>
+                                                    <i class="bx bx-trash text-sm"></i>
                                                 </button> --}}
                                             </td>
                                         </tr>

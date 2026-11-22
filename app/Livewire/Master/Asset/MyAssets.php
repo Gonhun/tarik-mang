@@ -12,6 +12,8 @@ class MyAssets extends Component
     use WithPagination;
 
     public $search = '';
+    #[\Livewire\Attributes\Url(as: 'status')]
+    public string $filter = '';   // '' | pending | used | borrowed | other
     protected $paginationTheme = 'bootstrap';
     protected $listeners = ['AcceptAssetId', 'deletePermissionConfirmed','refreshMyAssets' => '$refresh'];
 
@@ -20,6 +22,12 @@ class MyAssets extends Component
      */
     public function updatedSearch()
     {
+        $this->resetPage();
+    }
+
+    public function setFilter(string $filter): void
+    {
+        $this->filter = in_array($filter, ['', 'pending', 'used', 'borrowed', 'other'], true) ? $filter : '';
         $this->resetPage();
     }
     public function reportLost($assetId)
@@ -78,32 +86,34 @@ class MyAssets extends Component
 
     public function render()
     {
-        // Ambil ID user yang sedang login
-        $userId = Auth::id();
+        $base = \App\Support\AssetHolding::query()->where('holder_user_id', Auth::id());
 
-        // Buat query dasar untuk model Asset
-        $query = Asset::query()
-            // Kondisi utama: cari aset yang kolom 'holder_user_id'-nya adalah ID user yang login
-            ->where('holder_user_id', $userId)
-            // Eager load relasi untuk ditampilkan di tabel agar efisien
-            ->with(['assetType', 'assetBrand', 'assetSeries', 'jobsite']);
+        $counts = (clone $base)->selectRaw("count(*) as total,
+                sum(case when status = 'Pre-Used' then 1 else 0 end) as pending,
+                sum(case when status = 'Used' then 1 else 0 end) as used,
+                sum(case when status = 'Borrowed' then 1 else 0 end) as borrowed")->first();
 
-        // Terapkan filter pencarian jika ada input
-        if (!empty($this->search)) {
-            $searchTerm = '%' . $this->search . '%';
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('asset_number', 'like', $searchTerm)
-                  ->orWhere('serial_number', 'like', $searchTerm)
-                  ->orWhereHas('assetType', fn($sq) => $sq->where('name', 'like', $searchTerm))
-                  ->orWhereHas('assetBrand', fn($sq) => $sq->where('name', 'like', $searchTerm))
-                  ->orWhereHas('assetSeries', fn($sq) => $sq->where('name', 'like', $searchTerm));
-            });
+        $query = (clone $base)
+            ->with(['assetType:id,name', 'assetBrand:id,name', 'assetSeries:id,name', 'jobsite:id,code,name',
+                'transaction:id,transaction_number,transaction_date,created_at'])
+            ->when($this->filter === 'pending', fn ($q) => $q->where('status', 'Pre-Used'))
+            ->when($this->filter === 'used', fn ($q) => $q->where('status', 'Used'))
+            ->when($this->filter === 'borrowed', fn ($q) => $q->where('status', 'Borrowed'))
+            ->when($this->filter === 'other', fn ($q) => $q->whereNotIn('status', ['Pre-Used', 'Used', 'Borrowed']));
+
+        if (trim((string) $this->search) !== '') {
+            $term = '%' . \App\Support\SqlLike::escape(trim($this->search)) . '%';
+            $query->where(fn ($q) => $q->where('asset_number', 'like', $term)
+                ->orWhere('serial_number', 'like', $term)
+                ->orWhereHas('assetType', fn ($sq) => $sq->where('name', 'like', $term))
+                ->orWhereHas('assetBrand', fn ($sq) => $sq->where('name', 'like', $term))
+                ->orWhereHas('assetSeries', fn ($sq) => $sq->where('name', 'like', $term)));
         }
 
-        // Ambil data dengan pagination
-        $myAssets = $query->orderBy('updated_at', 'desc')->paginate(10);
         return view('livewire.master.asset.my-assets', [
-            'myAssets' => $myAssets,
+            // Yang perlu dikonfirmasi selalu di atas.
+            'myAssets' => $query->orderByRaw("case when status = 'Pre-Used' then 0 else 1 end")->orderByDesc('updated_at')->paginate(12),
+            'counts' => $counts,
         ]);
     }
 }

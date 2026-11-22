@@ -1,253 +1,256 @@
 <div>
-    <div class="container-fluid py-4">
-        {{-- Pesan Sukses Global --}}
-        @if (session()->has('message'))
-            <div class="alert alert-success" role="alert">
-                {{ session('message') }}
-            </div>
-        @endif
-        
-        <div class="card">
-            {{-- Navigasi Tab --}}
-            <div class="card-header p-0">
-                <ul class="nav nav-tabs" id="myTab" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link {{ $tab == 0 ? 'active' : '' }}" id="roles-tab" data-bs-toggle="tab" data-bs-target="#roles-tab-pane" type="button" role="tab" aria-controls="roles-tab-pane" aria-selected="true" wire:click="tab = 0">Manajemen Roles</button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link {{ $tab == 1 ? 'active' : '' }}" id="permissions-tab" data-bs-toggle="tab" data-bs-target="#permissions-tab-pane" type="button" role="tab" aria-controls="permissions-tab-pane" aria-selected="false" wire:click="tab = 1">Manajemen Permissions</button>
-                    </li>
-                </ul>
-            </div>
-            
-            <div class="tab-content" id="myTabContent">
-                {{-- KONTEN TAB ROLES --}}
-                
-                <div class="tab-pane fade {{ $tab == 0 ? 'show active' : '' }}" id="roles-tab-pane" role="tabpanel" aria-labelledby="roles-tab" tabindex="0">
-                        <div class="card-body">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="mb-0">Daftar Roles</h6>
-                                <button wire:click="createRole()" class="btn btn-primary btn-sm">Tambah Role Baru</button>
-                            </div>
-                            <input wire:model.live.debounce.300ms="searchRole" type="text" class="form-control mb-3" placeholder="Cari role...">
-                            <div class="table-responsive">
-                                <table class="table table-hover align-items-center mb-0">
-                                    <thead class="bg-gradient-primary text-white">
-                                        <tr>
-                                            <th><i class="bx bx-user me-1"></i> Nama Role</th>
-                                            <th><i class="bx bx-key me-1"></i> Permissions</th>
-                                            <th class="text-end"><i class="bx bx-cog me-1"></i> Aksi</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        @forelse ($roles as $role)
-                                            <tr>
-                                                <td class="font-weight-bold align-middle">
-                                                    <span class="text-primary">
-                                                        <i class="bx bx-shield-quarter me-1"></i>{{ $role->name }}
-                                                    </span>
-                                                </td>
-                                                <td class="align-middle">
-                                                    @if($role->permissions->count())
-                                                        @foreach ($role->permissions as $permission)
-                                                            <span class="badge bg-gradient-info text-white me-1 mb-1" style="font-size: 0.85em;">
-                                                                <i class="bx bx-check-shield"></i> {{ $permission->name }}
-                                                            </span>
-                                                        @endforeach
-                                                    @else
-                                                        <span class="badge bg-light text-muted">Tidak ada</span>
-                                                    @endif
-                                                </td>
-                                                <td class="text-center align-middle">
-                                                    <button wire:click="editRole({{ $role->id }})" class="btn btn-sm btn-outline-primary py-1 px-2 me-1" title="Edit Role">
-                                                        <i class="bx bx-edit-alt"></i>
-                                                    </button>
-                                                    <button wire:click="deleteRole({{ $role->id }})" class="btn btn-sm btn-outline-danger py-1 px-2 me-1" title="Hapus Role">
-                                                        <i class="bx bx-trash"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        @empty
-                                            <tr>
-                                                <td colspan="3" class="text-center text-muted py-4">
-                                                    <i class="bx bx-info-circle fs-3 mb-2 d-block"></i>
-                                                    <span>Tidak ada role ditemukan.</span>
-                                                </td>
-                                            </tr>
-                                        @endforelse
-                                    </tbody>
-                                </table>
-                            </div>
-                            <div class="mt-3">{{ $roles->links() }}</div>
-                        </div>
-                    </div>
-                
+  <div class="container-fluid py-4">
+    <div class="page-header">
+      <div>
+        <h4 class="mb-1">Role &amp; Permission</h4>
+        <div class="page-subtitle">Atur menu dan fitur yang bisa diakses setiap role. Perubahan di matriks langsung tersimpan.</div>
+      </div>
+      <div class="d-flex flex-wrap gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary" wire:click="createPermission"><i class="bx bx-key me-1"></i>Tambah permission</button>
+        <button type="button" class="btn btn-sm btn-primary" wire:click="createRole"><i class="bx bx-plus me-1"></i>Tambah role</button>
+      </div>
+    </div>
 
-                {{-- KONTEN TAB PERMISSIONS --}}
-                <div class="tab-pane fade {{ $tab == 1 ? 'show active' : '' }}" id="permissions-tab-pane" role="tabpanel" aria-labelledby="permissions-tab" tabindex="0">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <h5 class="mb-0 text-info">
-                                <i class="bx bx-key me-2"></i> Daftar Permissions
-                            </h5>
-                            <button wire:click="createPermission()" class="btn btn-gradient-primary btn-sm shadow">
-                                <i class="bx bx-plus me-1"></i> Tambah Permission Baru
-                            </button>
-                        </div>
-                        <div class="input-group mb-3">
-                            <span class="input-group-text bg-light"><i class="bx bx-search"></i></span>
-                            <input wire:model.live.debounce.300ms="searchPermission" type="text" class="form-control" placeholder="Cari permission...">
-                        </div>
-                        <div class="table-responsive">
-                            <table class="table table-hover align-items-center mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th><i class="bx bx-lock-alt me-1"></i> Nama Permission</th>
-                                        <th class="text-end"><i class="bx bx-cog me-1"></i> Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                   
-                                    @forelse ($permissions as $permission)
-                                        <tr>
-                                            <td class="font-weight-bold align-middle">
-                                                <span class="badge bg-gradient-info text-white px-2 py-1" style="font-size: 1em;">
-                                                    <i class="bx bx-check-shield me-1"></i> {{ $permission->name }}
-                                                </span>
-                                            </td>
-                                            <td class="text-end align-middle">
-                                                <button wire:click="editPermission({{ $permission->id }})" class="btn btn-sm btn-outline-info py-1 px-2 me-1" title="Edit Permission">
-                                                    <i class="bx bx-edit-alt"></i>
-                                                </button>
-                                                <button wire:click="deletePermission({{ $permission->id }})" class="btn btn-sm btn-outline-danger py-1 px-2" title="Hapus Permission">
-                                                    <i class="bx bx-trash"></i>
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    @empty
-                                        <tr>
-                                            <td colspan="2" class="text-center text-muted py-4">
-                                                <i class="bx bx-info-circle fs-3 mb-2 d-block"></i>
-                                                <span>Tidak ada permission ditemukan.</span>
-                                            </td>
-                                        </tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="mt-3">{{ $permissions->links() }}</div>
-                    </div>
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-4">
+      <ul class="nav nav-pills gap-1">
+        @foreach (['matrix' => ['Matriks akses', 'bx-grid'], 'roles' => ['Role', 'bx-id-card'], 'permissions' => ['Permission', 'bx-key']] as $key => [$label, $icon])
+          <li class="nav-item">
+            <button type="button" class="nav-link {{ $tab === $key ? 'active' : '' }}" wire:click="setTab('{{ $key }}')"><i class="bx {{ $icon }} me-1"></i>{{ $label }}</button>
+          </li>
+        @endforeach
+      </ul>
+      @if ($tab !== 'roles')
+        <input type="search" wire:model.live.debounce.300ms="search" class="form-control form-control-sm ms-md-auto" style="max-width: 260px" placeholder="Cari permission / keterangan…">
+      @endif
+    </div>
+
+    {{-- ================= Matriks ================= --}}
+    @if ($tab === 'matrix')
+      <div class="card">
+        <div class="table-responsive" style="max-height: 72vh">
+          <table class="table table-sm table-hover mb-0 perm-matrix">
+            <thead>
+              <tr>
+                <th class="perm-col">Permission</th>
+                @foreach ($roles as $role)
+                  <th class="text-center role-col">
+                    <div class="text-heading text-truncate" title="{{ $role->name }}">{{ $role->name }}</div>
+                    <small class="text-body-secondary fw-normal text-lowercase">{{ $role->users_count }} user</small>
+                    @if ($locks[$role->id])<div><i class="bx bx-lock-alt text-body-secondary" title="{{ $locks[$role->id] }}"></i></div>@endif
+                  </th>
+                @endforeach
+              </tr>
+            </thead>
+            <tbody wire:loading.class="opacity-75" wire:target="togglePermission,toggleGroup">
+              @forelse ($groups as $group => $items)
+                <tr class="group-row">
+                  <td class="perm-col fw-semibold">{{ $group }} <small class="text-body-secondary fw-normal">({{ $items->count() }})</small></td>
+                  @foreach ($roles as $role)
+                    @php
+                        $have = $items->filter(fn ($p) => isset($granted[$role->id][$p->id]))->count();
+                        $state = $have === 0 ? 'none' : ($have === $items->count() ? 'all' : 'some');
+                    @endphp
+                    <td class="text-center">
+                      <button type="button" class="btn btn-sm btn-icon btn-text-{{ $state === 'none' ? 'secondary' : 'primary' }}"
+                              title="{{ $state === 'all' ? 'Cabut semua' : 'Beri semua' }} {{ $group }} untuk {{ $role->name }}"
+                              wire:click="toggleGroup({{ $role->id }}, @js($group))"
+                              @if ($state === 'all') wire:confirm="Cabut semua izin {{ $group }} dari {{ $role->name }}?" @endif
+                              @disabled($locks[$role->id])>
+                        <i class="bx {{ $state === 'all' ? 'bxs-checkbox-checked' : ($state === 'some' ? 'bxs-checkbox-minus' : 'bx-checkbox') }} fs-4"></i>
+                      </button>
+                    </td>
+                  @endforeach
+                </tr>
+                @foreach ($items as $p)
+                  <tr wire:key="p-{{ $p->id }}">
+                    <td class="perm-col">
+                      <div class="fw-medium">{{ $p->name }}
+                        @unless ($p->is_system)<span class="badge bg-label-secondary ms-1">tidak dipakai</span>@endunless
+                      </div>
+                      <small class="text-body-secondary">{{ $p->description }}</small>
+                    </td>
+                    @foreach ($roles as $role)
+                      @php
+                          $on = isset($granted[$role->id][$p->id]);
+                          $pinned = $on && in_array($role->name, $protectedRoles, true) && in_array($p->name, $lockedOnProtected, true);
+                      @endphp
+                      <td class="text-center">
+                        <input type="checkbox" class="form-check-input" {{ $on ? 'checked' : '' }}
+                               wire:click="togglePermission({{ $role->id }}, {{ $p->id }})"
+                               @disabled($locks[$role->id] || $pinned)
+                               title="{{ $pinned ? 'Wajib untuk ' . $role->name : ($locks[$role->id] ?? ($on ? 'Cabut' : 'Beri') . ' ' . $p->name) }}"
+                               aria-label="{{ $p->name }} untuk {{ $role->name }}">
+                      </td>
+                    @endforeach
+                  </tr>
+                @endforeach
+              @empty
+                <tr><td colspan="{{ $roles->count() + 1 }}"><div class="empty-state"><i class="bx bx-search"></i>Tidak ada permission yang cocok.</div></td></tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+        <div class="card-footer border-top small text-body-secondary d-flex flex-wrap gap-3">
+          <span><i class="bx bxs-checkbox-checked text-primary"></i> semua</span>
+          <span><i class="bx bxs-checkbox-minus text-primary"></i> sebagian</span>
+          <span><i class="bx bx-lock-alt"></i> role tidak bisa Anda ubah</span>
+          <span>Perubahan berlaku saat user memuat ulang halaman.</span>
+        </div>
+      </div>
+    @endif
+
+    {{-- ================= Role ================= --}}
+    @if ($tab === 'roles')
+      <div class="row g-3">
+        @foreach ($roles as $role)
+          <div class="col-md-6 col-xl-3" wire:key="r-{{ $role->id }}">
+            <div class="card h-100">
+              <div class="card-body">
+                <div class="d-flex align-items-start justify-content-between mb-2">
+                  <h5 class="mb-0">{{ $role->name }}</h5>
+                  @if (in_array($role->name, $protectedRoles, true))<span class="badge bg-label-danger">Sistem</span>@endif
                 </div>
+                <div class="d-flex gap-4 my-3">
+                  <a href="{{ route('admin.users', ['role' => $role->id]) }}" class="text-decoration-none">
+                    <div class="fs-4 fw-semibold text-heading lh-1">{{ number_format($role->users_count) }}</div>
+                    <small class="text-body-secondary">user <i class="bx bx-right-arrow-alt"></i></small>
+                  </a>
+                  <div>
+                    <div class="fs-4 fw-semibold lh-1">{{ $role->permissions->count() }}</div>
+                    <small class="text-body-secondary">permission</small>
+                  </div>
+                </div>
+                <div class="small text-body-secondary" style="min-height: 2.5rem">
+                  {{ $role->permissions->pluck('name')->take(6)->implode(', ') }}{{ $role->permissions->count() > 6 ? ', …' : '' }}
+                  @if ($role->permissions->isEmpty())<span class="fst-italic">Belum ada permission.</span>@endif
+                </div>
+                @if ($locks[$role->id])
+                  <div class="small text-warning mt-2"><i class="bx bx-lock-alt"></i> {{ $locks[$role->id] }}</div>
+                @endif
+              </div>
+              <div class="card-footer border-top d-flex gap-1 py-2">
+                <button type="button" class="btn btn-sm btn-label-primary" wire:click="$set('tab', 'matrix')"><i class="bx bx-grid me-1"></i>Atur izin</button>
+                <div class="ms-auto d-flex gap-1">
+                  <button type="button" class="btn btn-sm btn-icon btn-text-secondary" title="Ganti nama" wire:click="editRole({{ $role->id }})" @disabled($locks[$role->id])><i class="bx bx-edit"></i></button>
+                  <button type="button" class="btn btn-sm btn-icon btn-text-danger" title="Hapus" wire:click="deleteRole({{ $role->id }})"
+                          wire:confirm="Hapus role {{ $role->name }}?" @disabled($locks[$role->id] || in_array($role->name, $protectedRoles, true))><i class="bx bx-trash"></i></button>
+                </div>
+              </div>
             </div>
-        </div>
-    </div>
-
-    {{-- MODAL UNTUK ROLE --}}
-    @if($isRoleModalOpen)
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content">
-                <form wire:submit.prevent="storeRole">
-                    <div class="modal-header"><h5 class="modal-title">{{ $role_id ? 'Edit Role' : 'Tambah Role Baru' }}</h5><button type="button" class="btn-close" wire:click="closeRoleModal"></button></div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="role_name" class="form-label">Nama Role</label>
-                            <input type="text" wire:model.defer="role_name" class="form-control @error('role_name') is-invalid @enderror" id="role_name">
-                            @error('role_name') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Permissions untuk Role ini:</label>
-                            <div class="row" style="max-height: 250px; overflow-y: auto;">
-                                @foreach ($allPermissions as $permission)
-                                    <div class="col-md-6">
-                                        <div class="form-check">
-                                            <input class="form-check-input" type="checkbox" value="{{ $permission->id }}" wire:model.defer="role_permissions" id="perm_{{ $permission->id }}">
-                                            <label class="form-check-label" for="perm_{{ $permission->id }}">{{ $permission->name }}</label>
-                                        </div>
-                                    </div>
-                                @endforeach
-                            </div>
-                            @error('role_permissions') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" wire:click="closeRoleModal">Batal</button>
-                        <button type="submit" class="btn btn-primary">Simpan</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
+          </div>
+        @endforeach
+      </div>
     @endif
 
-    {{-- MODAL UNTUK PERMISSION --}}
-    @if($isPermissionModalOpen)
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-dialog-centered">
-            <div class="modal-content">
-                <form wire:submit.prevent="storePermission">
-                    <div class="modal-header"><h5 class="modal-title">{{ $permission_id ? 'Edit Permission' : 'Tambah Permission Baru' }}</h5><button type="button" class="btn-close" wire:click="closePermissionModal"></button></div>
-                    <div class="modal-body">
-                        <div class="mb-3">
-                            <label for="permission_name" class="form-label">Nama Permission</label>
-                            <input type="text" wire:model.defer="permission_name" class="form-control @error('permission_name') is-invalid @enderror" id="permission_name" placeholder="Contoh: edit articles">
-                            @error('permission_name') <span class="text-danger">{{ $message }}</span> @enderror
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" wire:click="closePermissionModal">Batal</button>
-                        <button type="submit" class="btn btn-primary">Simpan</button>
-                    </div>
-                </form>
-            </div>
+    {{-- ================= Permission ================= --}}
+    @if ($tab === 'permissions')
+      <div class="alert alert-info small d-flex gap-2">
+        <i class="bx bx-info-circle fs-5"></i>
+        <div>Permission <b>sistem</b> dipakai langsung di kode untuk membuka menu dan halaman, jadi namanya terkunci. Permission baru hanya berguna setelah dipakai di kode oleh developer.
+          @if ($unusedCount) Ada <b>{{ $unusedCount }}</b> permission yang tidak dipakai (kelompok "Lainnya") dan boleh dibersihkan.@endif
         </div>
-    </div>
+      </div>
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead><tr><th>Permission</th><th>Keterangan</th><th class="text-center">Role</th><th>Status</th><th class="text-end">Aksi</th></tr></thead>
+            <tbody>
+              @forelse ($groups as $group => $items)
+                <tr class="group-row"><td colspan="5" class="fw-semibold">{{ $group }}</td></tr>
+                @foreach ($items as $p)
+                  <tr wire:key="pl-{{ $p->id }}">
+                    <td class="fw-medium">{{ $p->name }}</td>
+                    <td class="small text-body-secondary" style="min-width: 260px">{{ $p->description }}</td>
+                    <td class="text-center">{{ $p->roles_count }}</td>
+                    <td>
+                      @if ($p->is_system)
+                        <span class="badge bg-label-primary"><i class="bx bx-lock-alt"></i> Sistem</span>
+                      @else
+                        <span class="badge bg-label-secondary">Tidak dipakai</span>
+                      @endif
+                    </td>
+                    <td class="text-end text-nowrap">
+                      @unless ($p->is_system)
+                        <button type="button" class="btn btn-sm btn-icon btn-text-secondary" title="Ganti nama" wire:click="editPermission({{ $p->id }})"><i class="bx bx-edit"></i></button>
+                        <button type="button" class="btn btn-sm btn-icon btn-text-danger" title="{{ $p->roles_count ? 'Cabut dari semua role dulu' : 'Hapus' }}"
+                                wire:click="deletePermission({{ $p->id }})" wire:confirm="Hapus permission {{ $p->name }}?" @disabled($p->roles_count)><i class="bx bx-trash"></i></button>
+                      @endunless
+                    </td>
+                  </tr>
+                @endforeach
+              @empty
+                <tr><td colspan="5"><div class="empty-state"><i class="bx bx-search"></i>Tidak ada permission yang cocok.</div></td></tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
     @endif
+  </div>
+
+  {{-- Modal role --}}
+  @if ($isRoleModalOpen)
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.45)" wire:keydown.escape.window="closeRoleModal">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" wire:submit="storeRole">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ $role_id ? 'Ganti nama role' : 'Tambah role' }}</h5>
+            <button type="button" class="btn-close" wire:click="closeRoleModal" aria-label="Tutup"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label" for="role_name">Nama role</label>
+              <input id="role_name" type="text" wire:model="role_name" class="form-control @error('role_name') is-invalid @enderror" placeholder="mis. Admin Jobsite" autofocus>
+              @error('role_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            </div>
+            @unless ($role_id)
+              <label class="form-label" for="copyFromRole">Salin izin dari <span class="text-body-secondary fw-normal">(opsional)</span></label>
+              <select id="copyFromRole" wire:model="copyFromRole" class="form-select">
+                <option value="">Mulai tanpa izin</option>
+                @foreach ($roles as $r)<option value="{{ $r->id }}">{{ $r->name }} ({{ $r->permissions->count() }} izin)</option>@endforeach
+              </select>
+              <small class="text-body-secondary">Setelah dibuat, atur izinnya di Matriks akses.</small>
+            @endunless
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-label-secondary" wire:click="closeRoleModal">Batal</button>
+            <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="storeRole">Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  @endif
+
+  {{-- Modal permission --}}
+  @if ($isPermissionModalOpen)
+    <div class="modal fade show d-block" tabindex="-1" style="background: rgba(0,0,0,.45)" wire:keydown.escape.window="closePermissionModal">
+      <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" wire:submit="storePermission">
+          <div class="modal-header">
+            <h5 class="modal-title">{{ $permission_id ? 'Ganti nama permission' : 'Tambah permission' }}</h5>
+            <button type="button" class="btn-close" wire:click="closePermissionModal" aria-label="Tutup"></button>
+          </div>
+          <div class="modal-body">
+            <label class="form-label" for="permission_name">Nama permission</label>
+            <input id="permission_name" type="text" wire:model="permission_name" class="form-control @error('permission_name') is-invalid @enderror" autofocus>
+            @error('permission_name') <div class="invalid-feedback">{{ $message }}</div> @enderror
+            <small class="text-body-secondary d-block mt-2">Permission baru belum membuka menu apa pun sampai dipakai di kode (mis. <code>@@can('Nama')</code>) dan dicatat di <code>config/permissions.php</code>.</small>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-label-secondary" wire:click="closePermissionModal">Batal</button>
+            <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="storePermission">Simpan</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  @endif
+
+  <style>
+    .perm-matrix thead th { position: sticky; top: 0; z-index: 2; background: var(--bs-paper-bg, #fff); text-transform: none; letter-spacing: 0; vertical-align: bottom; }
+    .perm-matrix .perm-col { position: sticky; left: 0; z-index: 1; background: var(--bs-paper-bg, #fff); min-width: 280px; max-width: 380px; }
+    .perm-matrix thead .perm-col { z-index: 3; }
+    .perm-matrix .role-col { min-width: 110px; max-width: 140px; }
+    .perm-matrix .group-row td, .group-row td { background: #f6f7fb !important; }
+    .perm-matrix td { vertical-align: middle; }
+  </style>
 </div>
-
-@push('scripts')
-<script>
-    
-   document.addEventListener('livewire:init', function () {
-        Livewire.on('swal:error', event => {
-            const detail = event[0] || event;
-            Swal.fire({
-                title: detail.title,
-                text: detail.text,
-                icon: 'error'
-            });
-        });
-        Livewire.on('swal:confirm', event => {
-                // PASTIKAN BARIS INI ADA DI SINI
-                const detail = event[0] || event;
-
-                Swal.fire({
-                    title: detail.title, // Menggunakan variabel 'detail'
-                    text: detail.text,
-                    icon: detail.type,
-                    showCancelButton: true,
-                    confirmButtonColor: '#3085d6',
-                    cancelButtonColor: '#d33',
-                    confirmButtonText: 'Ya, Lanjutkan!',
-                    cancelButtonText: 'Batal'
-                }).then((result) => {
-                    if (result.isConfirmed) {
-                        // Panggil method di komponen PHP jika dikonfirmasi
-                        Livewire.dispatch(detail.method, { id: detail.id });
-                    }
-                });
-            });
-
-        Livewire.on('swal:alert', event => {
-            // PASTIKAN BARIS INI JUGA ADA DI SINI
-            const detail = event.detail[0] || event.detail;
-
-            Swal.fire({
-                title: detail.title, // Menggunakan variabel 'detail'
-                text: detail.text,
-                icon: detail.type
-            });
-        });
-    });
-</script>
-@endpush

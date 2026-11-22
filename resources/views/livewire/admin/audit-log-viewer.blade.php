@@ -2,34 +2,29 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Log Audit Aktivitas</h5>
-                            {{-- Tambahkan tombol filter di sini jika diperlukan --}}
-                        </div>
-                         @if (session()->has('message'))
+                <div class="page-header">
+            <div><h4 class="mb-1">Log Audit Aktivitas</h4></div>
+        </div>
+@if (session()->has('message'))
                             <div class="alert alert-success text-white mt-3" role="alert">
                                 {{ session('message') }}
                             </div>
                         @endif
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari event, tipe model, URL, IP, atau user...">
-                        </div>
+        <div class="card">
+            <div class="card-body px-0 pt-0 pb-2">
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari event, tipe model, URL, IP, atau user..."></div></div>
                         <div class="table-responsive p-0 mt-3">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Waktu</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">User</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Aksi</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Model Terdampak</th>
+                                        <th>Waktu</th>
+                                        <th>User</th>
+                                        <th>Aksi</th>
+                                        <th>Model Terdampak</th>
                                         <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">ID Model</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">URL</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">IP Address</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th>URL</th>
+                                        <th>IP Address</th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -58,10 +53,10 @@
                                                     {{ ucfirst($audit->event) }}
                                                 </span>
                                             </td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $this->getCleanModelName($audit->auditable_type) }}</p></td>
-                                            <td class="text-center"><p class="text-xs font-weight-bold mb-0">{{ $audit->auditable_id }}</p></td>
+                                            <td>{{ $this->getCleanModelName($audit->auditable_type) }}</td>
+                                            <td class="text-center">{{ $audit->auditable_id }}</td>
                                             <td><p class="text-xs font-weight-bold mb-0" style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ $audit->url }}">{{ $audit->url }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $audit->ip_address }}</p></td>
+                                            <td>{{ $audit->ip_address }}</td>
                                             <td class="align-middle">
                                                 <button wire:click="viewDetails({{ $audit->id }})" class="btn btn-link text-primary p-1 mb-0" data-bs-toggle="tooltip" title="Lihat Detail Perubahan">
                                                     <i class="bx bx-bxs-bullseye text-sm"></i>

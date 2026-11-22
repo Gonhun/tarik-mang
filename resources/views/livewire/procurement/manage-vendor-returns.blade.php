@@ -1,10 +1,12 @@
 <div>
     <div class="container-fluid py-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Manajemen QC Assets</h5>
-                <p class="text-sm mb-0">Daftar item aset yang gagal proses QC dan memerlukan tindakan lanjut.</p>
-            </div>
+        <div class="page-header">
+      <div>
+        <h4 class="mb-1">Manajemen QC Assets</h4>
+        <div class="page-subtitle">Daftar item aset yang gagal proses QC dan memerlukan tindakan lanjut.</div>
+      </div>
+    </div>
+    <div class="card">
             <div class="card-body">
                 @if (session()->has('message'))
                     <div class="alert alert-success" role="alert">
@@ -18,13 +20,13 @@
                 @endif
 
                 <div class="table-responsive">
-                    <table class="table align-items-center mb-0">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">No. Pengajuan</th>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Item Gagal QC</th>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Alasan Gagal</th>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2 text-center">Tindakan Lanjut</th>
+                                <th>No. Pengajuan</th>
+                                <th>Item Gagal QC</th>
+                                <th>Alasan Gagal</th>
+                                <th class="text-center">Tindakan Lanjut</th>
                             </tr>
                         </thead>
                         <tbody>

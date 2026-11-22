@@ -1,4 +1,10 @@
 <div class="container-fluid py-4">
+    <div class="page-header">
+      <div>
+        <h4 class="mb-1">Standar Aset Jabatan</h4>
+        <div class="page-subtitle">Aset yang menjadi hak setiap jabatan; dipakai saat validasi permintaan aset.</div>
+      </div>
+    </div>
     <div class="card mb-4">
         <div class="card-header">
             <h5 class="mb-0">Pilih Jabatan untuk Kelola Standar Aset</h5>
@@ -52,16 +58,16 @@
                     <p class="text-muted text-center">Belum ada standar aset yang ditentukan untuk jabatan ini.</p>
                 @else
                     <div class="table-responsive">
-                        <table class="table align-items-center mb-0">
+                        <table class="table table-hover mb-0">
                             {{-- ... (struktur tabel standar aset seperti contoh Anda sebelumnya) ... --}}
                             <thead>
                                 <tr>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Tipe Aset</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Merek</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Seri</th>
+                                    <th>Tipe Aset</th>
+                                    <th>Merek</th>
+                                    <th>Seri</th>
                                     <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Jumlah</th>
-                                    <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Catatan Spek</th>
-                                    <th class="text-secondary opacity-7"></th>
+                                    <th>Catatan Spek</th>
+                                    <th class="text-end">Aksi</th>
                                 </tr>
                             </thead>
                             <tbody>

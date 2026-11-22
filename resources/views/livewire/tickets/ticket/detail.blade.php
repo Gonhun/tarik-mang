@@ -126,7 +126,7 @@
                         <div class="my-3">
                             <h5>Lampiran (Attachment)</h5>
                             <a href="{{ asset('storage/' . $ticket->attachment) }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                <i class="fa fa-paperclip"></i> Download Attachment
+                                <i class="bx bx-paperclip"></i> Download Attachment
                             </a>
                         </div>
                     @endif
@@ -174,7 +174,7 @@
 
                                         <div class="rating mb-2">
                                             @for($i = 1; $i <= 5; $i++)
-                                                <i class="fa fa-star {{ $rating >= $i ? 'text-warning' : 'text-secondary' }}"
+                                                <i class="bx bx-star {{ $rating >= $i ? 'text-warning' : 'text-secondary' }}"
                                                 wire:click="setRating({{ $i }})"
                                                 style="cursor: pointer; font-size: 22px;"></i>
                                             @endfor

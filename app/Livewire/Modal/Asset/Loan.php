@@ -36,7 +36,7 @@ class Loan extends Component
     {
         $u = Auth::user();
 
-        return $u->isItStaff() || $u->can('Master Asset');
+        return $u->isItStaff() || $u->can('Peminjaman');
     }
 
     public function open($data = [])

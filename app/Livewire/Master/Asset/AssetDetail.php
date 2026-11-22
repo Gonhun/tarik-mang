@@ -61,6 +61,7 @@ class AssetDetail extends Component
 
     public function mount(Asset $asset)
     {
+        abort_unless(Gate::allows('view-asset', $asset), 403, 'Anda tidak punya akses ke aset ini.');
         $this->asset = $asset;
         if (!in_array($this->tab, ['riwayat', 'dokumen', 'log'], true)) {
             $this->tab = 'riwayat';

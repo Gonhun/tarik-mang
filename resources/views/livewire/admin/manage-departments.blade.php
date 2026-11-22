@@ -2,15 +2,13 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Manajemen Departemen</h5>
-                            <button wire:click="create()" class="btn btn-primary btn-sm">
-                                <i class="fas fa-plus me-1"></i> Tambah Departemen Baru
-                            </button>
-                        </div>
-                        @if (session()->has('message'))
+                <div class="page-header">
+            <div><h4 class="mb-1">Departemen</h4></div>
+            <div class="d-flex flex-wrap gap-2"><button wire:click="create()" class="btn btn-primary btn-sm">
+                                <i class="bx bx-plus me-1"></i> Tambah Departemen Baru
+                            </button></div>
+        </div>
+@if (session()->has('message'))
                             <div class="alert alert-success mt-3" role="alert">
                                 {{ session('message') }}
                             </div>
@@ -20,29 +18,27 @@
                                 {{ session('error') }}
                             </div>
                         @endif
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
+        <div class="card">
+            <div class="card-body px-0 pt-0 pb-2">
                         {{-- Tambahkan input search di sini jika mau --}}
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari departemen...">
-                        </div>
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari departemen..."></div></div>
 
                         {{-- Bagian untuk menampilkan daftar departemen (opsional jika hanya fokus form tambah) --}}
                         {{-- Jika Anda ingin menampilkan daftar, tambahkan tabel di sini. Contoh: --}}
                         <div class="table-responsive p-0 mt-3">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Kode</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Nama Departemen</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th>Kode</th>
+                                        <th>Nama Departemen</th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($departments as $department)
                                         <tr>
-                                            <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $department->code }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $department->name }}</p></td>
+                                            <td>{{ $department->code }}</td>
+                                            <td>{{ $department->name }}</td>
                                             <td class="align-middle text-end">
                                                 <button wire:click="edit({{ $department->id }})" class="btn btn-link text-secondary mb-0 p-1" data-bs-toggle="tooltip" title="Edit Departemen">
                                                     <i class="bx bx-edit text-sm"></i>
@@ -50,7 +46,7 @@
                                                 {{-- <button wire:click="delete({{ $department->id }})"
                                                         wire:confirm="Apakah Anda yakin ingin menghapus departemen ini: {{ $department->code }} - {{ $department->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Departemen">
-                                                    <i class="far fa-trash-alt text-sm"></i>
+                                                    <i class="bx bx-trash text-sm"></i>
                                                 </button> --}}
                                             </td>
                                         </tr>

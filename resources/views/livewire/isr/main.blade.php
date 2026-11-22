@@ -1,4 +1,11 @@
-<div>
+<div wire:init="Getbilling">
+    @if ($errorMessage)
+      <div class="container-fluid pt-4"><div class="alert alert-danger d-flex gap-2 mb-0"><i class="bx bx-error-circle fs-5"></i><div>{{ $errorMessage }}</div>
+        <button type="button" class="btn btn-sm btn-outline-danger ms-auto" wire:click="Getbilling">Coba lagi</button></div></div>
+    @elseif (!$loaded)
+      <div class="container-fluid pt-4"><div class="alert alert-secondary d-flex gap-2 mb-0 align-items-center"><span class="spinner-border spinner-border-sm"></span> Mengambil data billing ISR…</div></div>
+    @endif
+
     <div class="container-fluid py-4">
         <div class="nav-wrapper position-relative end-0">
             <div class="row">

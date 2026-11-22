@@ -21,7 +21,6 @@
 
     <script src="{{ asset('assets/vendor/js/helpers.js') }}"></script>
     <script src="{{ asset('assets/js/config.js') }}"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@rive-app/canvas@2.30.4/rive.min.js"></script>
 
     @livewireStyles
     @stack('styles')

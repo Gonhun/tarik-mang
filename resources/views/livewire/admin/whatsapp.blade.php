@@ -84,7 +84,21 @@
                   @if ($pairingCode)
                     <div class="border rounded p-4">
                       <small class="text-body-secondary d-block mb-1">Kode pairing</small>
-                      <div class="fs-2 fw-bold font-monospace" style="letter-spacing:.2em">{{ $pairingCode }}</div>
+                      @php $code = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $pairingCode)); @endphp
+                      <div class="fs-2 fw-bold font-monospace" style="letter-spacing:.2em">{{ strlen($code) === 8 ? substr($code, 0, 4) . '-' . substr($code, 4) : $code }}</div>
+                      <button type="button" class="btn btn-sm btn-label-secondary mt-2"
+                              x-data="{ copied: false }"
+                              x-on:click="navigator.clipboard.writeText(@js($code)).then(() => { copied = true; setTimeout(() => copied = false, 1500) })">
+                        <i class="bx" :class="copied ? 'bx-check' : 'bx-copy'"></i> <span x-text="copied ? 'Tersalin' : 'Salin kode'"></span>
+                      </button>
+                      <small class="text-body-secondary d-block mt-2">Untuk nomor {{ $pairPhone }} · kode berlaku ±1 menit</small>
+                      @php $req = strtoupper((string) $requestedPairingCode); @endphp
+                      @if ($req && $req !== $code)
+                        <small class="d-block mt-2 text-warning">Gateway belum mendukung kode kustom ({{ $req }}), jadi memakai kode acak di atas. Kode di atas tetap valid.</small>
+                      @endif
+                      @if ($bad = \App\Support\WhatsAppGateway::invalidPairingChars($code))
+                        <small class="d-block mt-1 text-danger">Kode mengandung karakter {{ implode(', ', $bad) }} yang tidak dipakai WhatsApp; jika ditolak di HP, ganti WHATSAPP_PAIRING_PREFIX.</small>
+                      @endif
                     </div>
                   @else
                     <img src="{{ $qr }}" alt="QR WhatsApp" class="img-fluid border rounded p-2 bg-white" style="max-width: 260px; width: 100%;">
@@ -121,8 +135,16 @@
               <form wire:submit="pairWithPhone" class="row g-2 align-items-start">
                 <div class="col-12"><small class="text-body-secondary">Tidak bisa scan? Dapatkan kode pairing untuk dimasukkan di HP:</small></div>
                 <div class="col-sm">
-                  <input type="text" wire:model="pairPhone" inputmode="tel" class="form-control form-control-sm @error('pairPhone') is-invalid @enderror" placeholder="Nomor WA pengirim, mis. 0812xxxx">
+                  {{-- Langsung dinormalkan saat diketik: hanya angka, 0xxx → 62xxx, 8xxx → 628xxx --}}
+                  <input type="text" wire:model="pairPhone" inputmode="numeric" autocomplete="tel"
+                         x-on:input="
+                           let v = $el.value.replace(/\D/g, '');
+                           if (v.startsWith('0')) v = '62' + v.slice(1);
+                           else if (v.startsWith('8')) v = '62' + v;
+                           if (v !== $el.value) { $el.value = v; $el.dispatchEvent(new Event('input')); }"
+                         class="form-control form-control-sm @error('pairPhone') is-invalid @enderror" placeholder="Nomor WA pengirim, mis. 0812xxxx → 62812xxxx">
                   @error('pairPhone') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                  <small class="text-body-secondary">Awalan 0 otomatis menjadi 62.</small>
                 </div>
                 <div class="col-sm-auto">
                   <button type="submit" class="btn btn-sm btn-outline-success w-100" wire:loading.attr="disabled" wire:target="pairWithPhone">Minta kode</button>

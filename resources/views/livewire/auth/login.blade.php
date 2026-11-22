@@ -1,37 +1,79 @@
+@php
+    $ls = \App\Support\LoginSettings::all();
+    $bgUrl = \App\Support\LoginSettings::backgroundUrl();
+    $logoUrl = \App\Support\LoginSettings::logoUrl();
+@endphp
 <div class="auth-split">
-  {{-- Panel identitas (desktop) --}}
-  <aside class="auth-split__brand d-none d-lg-flex">
-    <div class="d-flex align-items-center gap-2">
-      <span class="app-brand-mark auth-mark"><i class="bx bx-cube-alt"></i></span>
-      <div class="lh-sm">
-        <div class="fw-bold fs-5">AMS</div>
-        <small class="opacity-75">IT Operations</small>
+  {{-- Panel identitas (desktop). Gambar, logo, dan teks diatur Administrator di Administrasi > Tampilan Login. --}}
+  <aside class="auth-split__brand d-none d-lg-flex" @if ($bgUrl) style="background-image: url('{{ $bgUrl }}');" @endif>
+    <div class="auth-split__overlay" style="opacity: {{ $bgUrl ? ((int) $ls['overlay']) / 100 : 1 }}"></div>
+    <div class="auth-split__inner">
+      <div class="d-flex align-items-center gap-3">
+        <span class="auth-logo"><img src="{{ $logoUrl }}" alt="PT Bina Sarana Sukses"></span>
+        <div class="lh-sm">
+          <div class="fw-bold fs-5">AMS</div>
+          <small class="opacity-75">IT Operations</small>
+        </div>
       </div>
-    </div>
 
-    <div class="auth-split__copy">
-      <h1 class="text-white fw-bold mb-3">Aset IT tercatat rapi, dari gudang sampai ke tangan user.</h1>
-      <ul class="list-unstyled mb-0 d-grid gap-3">
-        <li class="d-flex gap-3"><i class="bx bx-package fs-4"></i><span>Inventaris, label QR, dan stock opname</span></li>
-        <li class="d-flex gap-3"><i class="bx bx-transfer fs-4"></i><span>Serah terima, pengembalian, mutasi, dan peminjaman</span></li>
-        <li class="d-flex gap-3"><i class="bx bx-check-shield fs-4"></i><span>Persetujuan berjenjang sesuai workflow</span></li>
-      </ul>
-    </div>
+      <div class="auth-split__copy">
+        <h1 class="text-white fw-bold mb-3">{{ $ls['headline'] }}</h1>
+        @if (!empty($ls['points']))
+          <ul class="list-unstyled mb-0 d-grid gap-3">
+            @foreach ($ls['points'] as $point)
+              <li class="d-flex gap-3"><i class="bx bx-check-circle fs-4"></i><span>{{ $point }}</span></li>
+            @endforeach
+          </ul>
+        @endif
+      </div>
 
-    <small class="opacity-75">© {{ date('Y') }} PT Bina Sarana Sukses</small>
+      <small class="opacity-75">© {{ date('Y') }} PT Bina Sarana Sukses</small>
+    </div>
   </aside>
 
   {{-- Form --}}
   <main class="auth-split__form">
     <div class="auth-form-box">
-      <div class="d-flex d-lg-none align-items-center justify-content-center gap-2 mb-2">
-        <span class="app-brand-mark"><i class="bx bx-cube-alt"></i></span>
+      <div class="d-flex d-lg-none align-items-center justify-content-center gap-2 mb-3">
+        <img src="{{ $logoUrl }}" alt="PT Bina Sarana Sukses" style="height: 30px">
         <span class="fw-bold fs-5 text-heading">AMS <span class="fw-medium text-body-secondary">IT Ops</span></span>
       </div>
 
-      <div class="auth-character" wire:ignore>
-        <canvas id="riveCanvas" width="400" height="400" aria-hidden="true"></canvas>
-      </div>
+      @if ($ls['show_character'])
+        {{-- Maskot SVG (tanpa file/library eksternal): mata mengikuti NIK, tangan menutup mata saat mengetik password. --}}
+        <div class="auth-character" wire:ignore>
+          <svg id="mascot" class="mascot" viewBox="0 0 200 180" role="img" aria-label="Maskot AMS">
+            <ellipse cx="100" cy="168" rx="58" ry="7" class="mascot-shadow"/>
+            <g class="mascot-body">
+              <rect x="88" y="128" width="24" height="22" rx="4" class="mascot-stand"/>
+              <rect x="66" y="146" width="68" height="10" rx="5" class="mascot-stand"/>
+              <rect x="30" y="22" width="140" height="110" rx="18" class="mascot-frame"/>
+              <rect x="42" y="34" width="116" height="86" rx="10" class="mascot-screen"/>
+              <circle cx="100" cy="28" r="2.5" class="mascot-cam"/>
+              <ellipse cx="62" cy="96" rx="9" ry="5" class="mascot-cheek"/>
+              <ellipse cx="138" cy="96" rx="9" ry="5" class="mascot-cheek"/>
+              <g class="mascot-eyes">
+                <ellipse cx="76" cy="74" rx="11" ry="13" class="mascot-eye"/>
+                <ellipse cx="124" cy="74" rx="11" ry="13" class="mascot-eye"/>
+                <g class="mascot-pupils">
+                  <circle cx="76" cy="76" r="6" class="mascot-pupil"/>
+                  <circle cx="124" cy="76" r="6" class="mascot-pupil"/>
+                  <circle cx="78.5" cy="73" r="2" fill="#fff"/>
+                  <circle cx="126.5" cy="73" r="2" fill="#fff"/>
+                </g>
+              </g>
+              <path class="mascot-mouth mascot-mouth--smile" d="M86 100 Q100 112 114 100"/>
+              <path class="mascot-mouth mascot-mouth--sad" d="M88 108 Q100 98 112 108"/>
+              <g class="mascot-hands">
+                <rect x="52" y="140" width="40" height="26" rx="13" class="mascot-hand mascot-hand--left"/>
+                <rect x="108" y="140" width="40" height="26" rx="13" class="mascot-hand mascot-hand--right"/>
+              </g>
+            </g>
+          </svg>
+        </div>
+      @else
+        <div class="d-none d-lg-flex justify-content-center mb-3"><img src="{{ $logoUrl }}" alt="PT Bina Sarana Sukses" style="height: 40px"></div>
+      @endif
 
       <div class="text-center mb-4">
         @if ($step === 1)
@@ -147,18 +189,33 @@
     .auth-split { grid-template-columns: minmax(380px, 5fr) 7fr; }
   }
   .auth-split__brand {
-    flex-direction: column;
-    justify-content: space-between;
-    gap: 2rem;
-    padding: 2.5rem 3rem;
+    position: relative;
     color: #fff;
-    background:
+    background-color: #4f52d9;
+    background-image:
       radial-gradient(circle at 15% 85%, rgba(255,255,255,.12) 0, transparent 45%),
       linear-gradient(160deg, var(--bs-primary) 0%, #4f52d9 100%);
+    background-size: cover;
+    background-position: center;
   }
+  /* Lapisan warna di atas gambar latar agar teks tetap terbaca. */
+  .auth-split__overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(160deg, rgba(40, 42, 120, .95) 0%, rgba(20, 20, 60, .95) 100%);
+  }
+  .auth-split__inner {
+    position: relative;
+    display: flex; flex-direction: column; justify-content: space-between; gap: 2rem;
+    padding: 2.5rem 3rem; width: 100%;
+  }
+  .auth-logo {
+    background: #fff; border-radius: .6rem; padding: .5rem .75rem;
+    display: inline-flex; align-items: center; box-shadow: 0 .25rem 1rem rgba(0,0,0,.15);
+  }
+  .auth-logo img { height: 34px; width: auto; display: block; }
+  .auth-split__copy h1 { text-shadow: 0 1px 8px rgba(0,0,0,.25); }
   .auth-split__copy { max-width: 28rem; }
   .auth-split__copy h1 { font-size: 1.85rem; line-height: 1.3; }
-  .auth-mark { background: rgba(255,255,255,.18); }
   .auth-split__form {
     display: flex;
     align-items: center;
@@ -176,12 +233,40 @@
   @media (min-width: 576px) {
     .auth-form-box { padding: 2rem 2.25rem 2.25rem; }
   }
-  .auth-character {
-    width: 168px;
-    height: 168px;
-    margin: 0 auto .5rem;
+  .auth-character { width: 150px; margin: 0 auto .75rem; }
+  .mascot { width: 100%; height: auto; display: block; overflow: visible; }
+  .mascot-shadow { fill: rgba(34, 48, 62, .08); }
+  .mascot-frame { fill: var(--bs-primary); }
+  .mascot-screen { fill: #fff; }
+  .mascot-stand { fill: #8f92ff; }
+  .mascot-cam { fill: rgba(255,255,255,.6); }
+  .mascot-cheek { fill: #ffb4c6; opacity: .7; }
+  .mascot-eye { fill: #eef0ff; }
+  .mascot-pupil { fill: #2b2c6e; }
+  .mascot-mouth { fill: none; stroke: #2b2c6e; stroke-width: 4; stroke-linecap: round; transition: opacity .2s; }
+  .mascot-mouth--sad { opacity: 0; }
+  .mascot-hand { fill: #ffd2a8; stroke: #e7a978; stroke-width: 2; }
+  .mascot-body { transform-origin: 100px 150px; animation: mascot-float 3.2s ease-in-out infinite; }
+  .mascot-pupils { transition: transform .15s ease-out; }
+  .mascot-eyes { transform-origin: 100px 74px; animation: mascot-blink 4.5s infinite; }
+  .mascot-hands rect { transition: transform .35s cubic-bezier(.34,1.56,.64,1); transform-box: fill-box; }
+  /* Menutup mata saat mengetik password */
+  .mascot.is-covering .mascot-hand--left { transform: translate(12px, -80px) rotate(-6deg); }
+  .mascot.is-covering .mascot-hand--right { transform: translate(-12px, -80px) rotate(6deg); }
+  .mascot.is-covering .mascot-pupils { transform: translateY(3px); }
+  /* Gagal login: menggeleng + cemberut */
+  .mascot.is-sad .mascot-mouth--smile { opacity: 0; }
+  .mascot.is-sad .mascot-mouth--sad { opacity: 1; }
+  .mascot.is-shake .mascot-body { animation: mascot-shake .5s ease-in-out; }
+  /* Berhasil: lompat kecil */
+  .mascot.is-happy .mascot-body { animation: mascot-hop .6s ease-in-out 2; }
+  @keyframes mascot-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  @keyframes mascot-blink { 0%,92%,100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  @keyframes mascot-shake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-8px) rotate(-2deg); } 40%,80% { transform: translateX(8px) rotate(2deg); } }
+  @keyframes mascot-hop { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-12px); } }
+  @media (prefers-reduced-motion: reduce) {
+    .mascot-body, .mascot-eyes, .mascot.is-shake .mascot-body, .mascot.is-happy .mascot-body { animation: none !important; }
   }
-  .auth-character canvas { width: 100%; height: 100%; display: block; }
   .auth-account {
     display: flex;
     align-items: center;
@@ -197,49 +282,36 @@
 
 @script
 <script>
-  // Karakter animasi: angkat tangan saat mengetik password, reaksi gagal saat error.
-  const canvas = document.getElementById('riveCanvas');
-  let inputs = [];
-  const input = (name) => inputs.find((i) => i.name.toLowerCase() === name.toLowerCase());
-
-  if (canvas && window.rive) {
-    const r = new rive.Rive({
-      src: @js(asset('assets/riv/login_screen_character.riv')),
-      canvas,
-      autoplay: true,
-      stateMachines: 'State Machine 1',
-      onLoad: () => {
-        r.resizeDrawingSurfaceToCanvas();
-        inputs = r.stateMachineInputs('State Machine 1') || [];
-        setHands($wire.step > 1);
-      },
-    });
-  }
-
-  function setHands(up) {
-    const i = input('hands_up');
-    if (i) i.value = up;
-  }
-  function fire(name) {
-    const i = input(name);
-    if (i && typeof i.fire === 'function') i.fire();
-  }
+  // Maskot: mata mengikuti NIK, tutup mata saat password, menggeleng saat gagal.
+  const mascot = () => document.getElementById('mascot');
+  const set = (cls, on) => mascot()?.classList.toggle(cls, on);
+  const look = (len) => {
+    const p = mascot()?.querySelector('.mascot-pupils');
+    if (!p) return;
+    // Bergerak dari kiri ke kanan sesuai panjang NIK, sedikit menunduk ke form.
+    const x = Math.max(-5, Math.min(5, -5 + (len || 0) * 0.8));
+    p.style.transform = `translate(${x}px, ${len ? 3 : 0}px)`;
+  };
 
   document.addEventListener('focusin', (e) => {
-    if (e.target.type === 'password') setHands(true);
-    if (e.target.id === 'nik') { const c = input('Check'); if (c) c.value = true; }
+    if (e.target.type === 'password') set('is-covering', true);
+    if (e.target.id === 'nik') look(e.target.value.length);
   });
   document.addEventListener('focusout', (e) => {
-    if (e.target.type === 'password') setHands(false);
-    if (e.target.id === 'nik') { const c = input('Check'); if (c) c.value = false; }
+    if (e.target.type === 'password') set('is-covering', false);
+    if (e.target.id === 'nik') look(0);
   });
   document.addEventListener('input', (e) => {
-    if (e.target.id !== 'nik') return;
-    const look = input('Look');
-    if (look) look.value = Math.min(e.target.value.length * 5, 100);
+    if (e.target.id === 'nik') look(e.target.value.length);
+    set('is-sad', false);
   });
 
-  $wire.on('login-step', ({ step }) => setHands(step > 1));
-  $wire.on('login-failed', () => fire('fail'));
+  $wire.on('login-failed', () => {
+    set('is-covering', false);
+    set('is-sad', true);
+    set('is-shake', false); void mascot()?.getBoundingClientRect(); set('is-shake', true);
+    setTimeout(() => set('is-shake', false), 600);
+  });
+  $wire.on('login-step', () => { set('is-sad', false); set('is-happy', true); setTimeout(() => set('is-happy', false), 1300); });
 </script>
 @endscript

@@ -23,6 +23,9 @@ Route::get('/register', App\Livewire\Auth\Register::class)->name('register')->mi
 //     dd(config('livewire.temporary_file_upload.preview_mimes'));
 // });
 Route::middleware('auth')->group(function () {
+    Route::get('admin/tampilan-login', App\Livewire\Admin\LoginSettings::class)
+        ->name('admin.login-settings')
+        ->middleware('can:Pengaturan Tampilan');
     Route::get('admin/roles-permissions', App\Livewire\Roles\ManageRolesPermissions::class)
         ->name('admin.roles-permissions')
         ->middleware('can:Add Permissions');
@@ -44,7 +47,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/isr', App\Livewire\Isr\Main::class)->name('Isr.main')->middleware('can:Isr');
 
-    Route::get('/software', App\Livewire\Licenses\Software\Main::class)->name('software.main');
+    Route::get('/software', App\Livewire\Licenses\Software\Main::class)->name('software.main')->middleware('can:Lisensi');
 
     Route::get('/admin/forigate', App\Livewire\Admin\Fortigate::class)->name('admin.fortigate')->middleware('can:Fortigate');
     // Halaman lama: diarahkan ke tab di halaman detail perangkat.
@@ -79,13 +82,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/admin/cost-center', App\Livewire\CostCenters\ManageCostCenters::class)->name('cc.cost-center')->middleware('can:Add Cost Center');
 
 
-    Route::get('/maps', App\Livewire\GpsMapViewer::class)->name('GpsMapViewer');
+    Route::get('/maps', App\Livewire\GpsMapViewer::class)->name('GpsMapViewer')->middleware('can:it-staff');
     Route::get('/dashboard', App\Livewire\Dashboard\Index::class)->name('dashboard'); // Misal halaman utama setelah login adalah absensi
     Route::get('/my/asset', App\Livewire\Master\Asset\MyAssets::class)->name('my.asset');
-    Route::get('/my/clearance', App\Livewire\ItClearanceForm::class)->name('my.clearance');
+    Route::get('/chat/file/{message}', App\Http\Controllers\ChatFileController::class)->whereNumber('message')->name('chat.file');
+    Route::get('/my/clearance', App\Livewire\ItClearanceForm::class)->name('my.clearance')->middleware('can:it-staff');
     Route::get('/asset', App\Livewire\Master\Asset\ManageAsset::class)->name('asset.index')->middleware('can:Master Asset');
     Route::get('/asset/bast/{id}', [BastPrint::class, 'view'])->whereNumber('id')->name('asset.bast')->middleware('can:Master Asset');
-    Route::get('/asset/damage', App\Livewire\Master\Asset\Damages\ManageDamageReports::class)->name('asset.damage')->middleware('can:Master Asset');
+    Route::get('/asset/damage', App\Livewire\Master\Asset\Damages\ManageDamageReports::class)->name('asset.damage')->middleware('can:Kerusakan Aset');
     Route::get('/asset/pengembalian/{id}', [PengembalianController::class, 'view'])->whereNumber('id')->name('asset.pengembalian')->middleware('can:Master Asset');
     Route::get('/asset/mutasi/{id}', [MutasiController::class, 'view'])
         ->whereNumber('id')
@@ -96,14 +100,22 @@ Route::middleware('auth')->group(function () {
         ->whereNumber(['transaction', 'asset'])
         ->name('asset.ba.print');
     // Stock opname (scan QR) & cetak label QR banyak sekaligus
-    Route::middleware('can:Master Asset')->group(function () {
+    Route::middleware('can:Stock Opname')->group(function () {
         Route::get('/asset/opname', App\Livewire\StockOpname\Index::class)->name('asset.opname');
         Route::get('/asset/opname/{opname}', App\Livewire\StockOpname\Session::class)->whereNumber('opname')->name('asset.opname.show');
+    });
+    Route::middleware('can:Cetak Label')->group(function () {
         Route::get('/asset/labels', App\Livewire\Master\Asset\LabelPicker::class)->name('asset.labels');
         Route::get('/asset/labels/print', [AssetLabelController::class, 'printMany'])->name('asset.labels.print');
+    });
+    Route::middleware('can:Peminjaman')->group(function () {
         Route::get('/asset/peminjaman', App\Livewire\AssetLoans\Index::class)->name('asset.loans');
     });
-    Route::get('/asset/qc', App\Livewire\Master\Asset\QcAsset::class)->name('asset.qc')->middleware('can:Master Asset');
+    Route::get('/asset/qc', App\Livewire\Master\Asset\QcAsset::class)->name('asset.qc')->middleware('can:QC Aset');
+    Route::middleware('can:Pemegang Aset')->group(function () {
+        Route::get('/asset/pemegang', App\Livewire\AssetHolders\Index::class)->name('asset.holders');
+        Route::get('/asset/pemegang/{user}', App\Livewire\AssetHolders\Show::class)->whereNumber('user')->name('asset.holders.show');
+    });
 
     Route::get('/asset/disposed', App\Livewire\AssetDisposals\ManageDisposed::class)->name('asset.disposed')->middleware('can:Mutasi');
 
@@ -126,8 +138,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/forecast/detail/{id}', DetailManageForecast::class)->name('forecast.detail');
     });
 
-    Route::get('/task', App\Livewire\Task\TaskList::class)->name('task.index');
-    Route::get('/task/create', App\Livewire\Task\TaskCreate::class)->name('task.create');
+    Route::get('/task', App\Livewire\Task\TaskList::class)->name('task.index')->middleware('can:it-staff');
+    Route::get('/task/create', App\Livewire\Task\TaskCreate::class)->name('task.create')->middleware('can:it-staff');
 
     Route::get('/asset-requests', App\Livewire\AssetRequests\CreateAssetRequestForm::class)->name('asset-requests.create');
     Route::get('/asset-requests/dashboard', App\Livewire\AssetRequests\Dashboard::class)->name('asset-requests.dashboard');
@@ -137,10 +149,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/asset-requests/po', App\Livewire\Admin\AssetRequest\Importpo::class)->name('request.asset-po')->middleware('can:Manajement Request');
     Route::get('/asset-requests/po-returns', App\Livewire\Procurement\ManageVendorReturns::class)->name('request.asset-po-returns')->middleware('can:Manajement Request');
     // Route::get('/bast', App\Livewire\AssetHandovers\ManageAssetHandovers::class)->name('bast.index'); 
-    Route::get('/bast', App\Livewire\AssetTransactions\ManageAssetTransactions::class)->name('bast.index');
+    Route::get('/bast', App\Livewire\AssetTransactions\ManageAssetTransactions::class)->name('bast.index')->middleware('can:Master Asset');
 
     Route::get('/games/tetris', App\Livewire\Games\Tetris::class)
-        ->name('games.tetris');
+        ->name('games.tetris')->middleware('can:it-staff');
 
     // Inventory Consumabel
     Route::get('/inventory/master-parts', App\Livewire\Inventory\Consumables\MaseterParts::class)->name('inventory.master.parts')->middleware('can:Master Asset');

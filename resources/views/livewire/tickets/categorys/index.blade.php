@@ -25,7 +25,7 @@
           
               <button type="submit" class="btn btn-primary" wire:loading.attr="disabled">
                   <span wire:loading.remove wire:target="saveCategory">Submit</span>
-                  <span class="d-none" wire:loading.class.remove="d-none">Saving... <i class="fa fa-spinner fa-spin"></i></span>
+                  <span class="d-none" wire:loading.class.remove="d-none">Saving... <i class="bx bx-loader-alt bx-spin fa-spin"></i></span>
               </button>
           </form>
           
@@ -68,7 +68,7 @@
                       <button class="btn btn-secondary btn-sm {{ $category->active ? 'btn-success' : 'btn-danger' }}" wire:click="changeStatusCategory({{ $category->id }})">
                         {{ $category->active ? 'Disable' : 'Enable' }}
                         <span class="d-none" wire:loading.class.remove="d-none">
-                          <i class="fa fa-spinner fa-spin"></i>
+                          <i class="bx bx-loader-alt bx-spin fa-spin"></i>
                         </span>
                       </button>
                     </td>

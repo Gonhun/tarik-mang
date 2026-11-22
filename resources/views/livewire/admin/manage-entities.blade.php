@@ -2,15 +2,15 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between">
-                            <h5 class="mb-0">Manajemen Entitas</h5>
-                            <button wire:click="create()" class="btn btn-primary btn-sm">
-                                <i class="fas fa-plus me-1"></i> Buat Entitas Baru
-                            </button>
-                        </div>
-                        @if (session()->has('message'))
+                <div class="page-header">
+      <div>
+        <h4 class="mb-1">Entitas</h4>
+      </div>
+      <div class="d-flex flex-wrap gap-2"><button wire:click="create()" class="btn btn-primary btn-sm">
+                                <i class="bx bx-plus me-1"></i> Buat Entitas Baru
+                            </button></div>
+    </div>
+    @if (session()->has('message'))
                             <div class="alert alert-success mt-3" role="alert">
                                 {{ session('message') }}
                             </div>
@@ -20,20 +20,18 @@
                                 {{ session('error') }}
                             </div>
                         @endif
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari berdasarkan kode atau nama entitas...">
-                        </div>
+    <div class="card">
+            <div class="card-body px-0 pt-0 pb-2">
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari berdasarkan kode atau nama entitas..."></div></div>
                         <div class="table-responsive p-0">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">ID</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Kode</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Nama Entitas</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Tanggal Dibuat</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th>ID</th>
+                                        <th>Kode</th>
+                                        <th>Nama Entitas</th>
+                                        <th>Tanggal Dibuat</th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -41,26 +39,26 @@
                                         <tr>
                                             <td>
                                                 <div class="d-flex px-3 py-1">
-                                                    <h6 class="mb-0 text-sm">{{ $entity->id }}</h6>
+                                                    <span class="fw-medium text-heading">{{ $entity->id }}</span>
                                                 </div>
                                             </td>
                                             <td>
-                                                <p class="text-xs font-weight-bold mb-0">{{ $entity->code }}</p>
+                                                {{ $entity->code }}
                                             </td>
                                             <td>
-                                                <p class="text-xs font-weight-bold mb-0">{{ $entity->name }}</p>
+                                                {{ $entity->name }}
                                             </td>
                                             <td class="align-middle text-center text-sm">
                                                 <span class="text-secondary text-xs font-weight-bold">{{ $entity->created_at->format('d M Y H:i') }}</span>
                                             </td>
                                             <td class="align-middle">
                                                 <button wire:click="edit({{ $entity->id }})" class="btn btn-link text-secondary mb-0 p-1" data-bs-toggle="tooltip" data-bs-placement="top" title="Edit Entitas">
-                                                    <i class="fas fa-edit text-sm"></i>
+                                                    <i class="bx bx-edit text-sm"></i>
                                                 </button>
                                                 <button wire:click="delete({{ $entity->id }})"
                                                         wire:confirm="Apakah Anda yakin ingin menghapus entitas ini: {{ $entity->code }} - {{ $entity->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Hapus Entitas">
-                                                    <i class="far fa-trash-alt text-sm"></i>
+                                                    <i class="bx bx-trash text-sm"></i>
                                                 </button>
                                             </td>
                                         </tr>

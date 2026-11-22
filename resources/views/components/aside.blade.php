@@ -4,14 +4,14 @@
     $on = fn (...$patterns) => request()->routeIs(...$patterns) ? 'active' : '';
     $open = fn (...$patterns) => request()->routeIs(...$patterns) ? 'active open' : '';
 
-    $assetMenu = $user->canAny(['Master Asset', 'Mutasi']);
+    $assetMenu = $user->canAny(['Master Asset', 'Mutasi', 'Pemegang Aset', 'QC Aset', 'Peminjaman', 'Kerusakan Aset', 'Stock Opname', 'Cetak Label']);
     $adminUser = $user->canAny(['Add User', 'Add Permissions']);
     $adminJabatan = $user->canAny(['Add Jabatan', 'Manajement IT']);
     $adminKategori = $user->canAny(['Add Type', 'Add Brands', 'Add Series']);
     $adminOrg = $user->canAny(['Add Jobsites', 'Add Dept', 'Add Entitas', 'Add Cost Center']);
     $adminIntegrasi = $user->canAny(['Fortigate', 'Whatsapp']);
     $adminAny = $adminUser || $adminJabatan || $adminKategori || $adminOrg || $adminIntegrasi
-        || $user->canAny(['Add Workflow', 'Logs']);
+        || $user->canAny(['Add Workflow', 'Logs', 'Pengaturan Tampilan']);
 @endphp
 
 <aside id="layout-menu" class="layout-menu menu-vertical menu bg-menu-theme">
@@ -71,6 +71,16 @@
             <div class="text-truncate">Inventaris Aset</div>
           </a>
         </li>
+      @endcan
+      @can('Pemegang Aset')
+        <li class="menu-item {{ $on('asset.holders*') }}">
+          <a href="{{ route('asset.holders') }}" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-user-pin"></i>
+            <div class="text-truncate">Pemegang Aset</div>
+          </a>
+        </li>
+      @endcan
+      @can('QC Aset')
         @livewire('sidebar.menu-item', [
             'routeName' => 'asset.qc',
             'label' => 'QC Aset Baru',
@@ -86,13 +96,15 @@
           </a>
         </li>
       @endcan
-      @can('Master Asset')
+      @can('Peminjaman')
         <li class="menu-item {{ $on('asset.loans') }}">
           <a href="{{ route('asset.loans') }}" class="menu-link">
             <i class="menu-icon tf-icons bx bx-time-five"></i>
             <div class="text-truncate">Peminjaman</div>
           </a>
         </li>
+      @endcan
+      @can('Kerusakan Aset')
         <li class="menu-item {{ $on('asset.damage') }}">
           <a href="{{ route('asset.damage') }}" class="menu-link">
             <i class="menu-icon tf-icons bx bx-wrench"></i>
@@ -108,19 +120,23 @@
           </a>
         </li>
       @endcan
-      @can('Master Asset')
+      @can('Stock Opname')
         <li class="menu-item {{ $on('asset.opname*') }}">
           <a href="{{ route('asset.opname') }}" class="menu-link">
             <i class="menu-icon tf-icons bx bx-scan"></i>
             <div class="text-truncate">Stock Opname</div>
           </a>
         </li>
+      @endcan
+      @can('Cetak Label')
         <li class="menu-item {{ $on('asset.labels*') }}">
           <a href="{{ route('asset.labels') }}" class="menu-link">
             <i class="menu-icon tf-icons bx bx-qr"></i>
             <div class="text-truncate">Cetak Label QR</div>
           </a>
         </li>
+      @endcan
+      @can('Master Asset')
         <li class="menu-item {{ $on('coa.index', 'master.forecast.pivot', 'forecast.*') }}">
           <a href="{{ route('coa.index') }}" class="menu-link">
             <i class="menu-icon tf-icons bx bx-spreadsheet"></i>
@@ -328,6 +344,14 @@
         </li>
       @endif
 
+      @can('Pengaturan Tampilan')
+        <li class="menu-item {{ $on('admin.login-settings') }}">
+          <a href="{{ route('admin.login-settings') }}" class="menu-link">
+            <i class="menu-icon tf-icons bx bx-palette"></i>
+            <div class="text-truncate">Tampilan Login</div>
+          </a>
+        </li>
+      @endcan
       @can('Logs')
         <li class="menu-item {{ $on('admin.logs') }}">
           <a href="{{ route('admin.logs') }}" class="menu-link">

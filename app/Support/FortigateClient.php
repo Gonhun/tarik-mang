@@ -229,6 +229,211 @@ class FortigateClient
         return $rows;
     }
 
+    /** Ambil nilai pertama yang terisi dari beberapa kemungkinan nama field (beda versi FortiOS). */
+    protected static function pick(array $row, array $keys, $default = null)
+    {
+        foreach ($keys as $k) {
+            $v = data_get($row, $k);
+            if ($v !== null && $v !== '') {
+                return $v;
+            }
+        }
+
+        return $default;
+    }
+
+    /** Ambil daftar baris dari respons (results / results.details). */
+    protected static function rowsFrom(array $json): array
+    {
+        $rows = data_get($json, 'results.details') ?? data_get($json, 'results') ?? [];
+        if (!is_array($rows)) {
+            return [];
+        }
+        if (!array_is_list($rows)) {
+            $rows = array_values($rows);
+        }
+
+        return array_values(array_filter($rows, 'is_array'));
+    }
+
+    /**
+     * FortiView: statistik teratas. $period: realtime | hour | day | week.
+     * Data historis (hour/day/week) butuh log tersimpan di disk Fortigate.
+     */
+    public function fortiview(string $reportBy, string $period = 'realtime', int $count = 50): array
+    {
+        $q = ['report_by' => $reportBy, 'sort_by' => 'bytes', 'count' => $count];
+        $q += $period === 'realtime' ? ['realtime' => 'true'] : ['time_period' => $period, 'device' => 'disk'];
+
+        return self::rowsFrom($this->get('monitor/fortiview/statistics', $q, 30));
+    }
+
+    protected static function bytesOf(array $r): int
+    {
+        $sent = (int) self::pick($r, ['sentbyte', 'sent_bytes', 'tx_bytes'], 0);
+        $rcvd = (int) self::pick($r, ['rcvdbyte', 'rcvd_bytes', 'rx_bytes'], 0);
+        $total = (int) self::pick($r, ['bytes', 'traffic', 'total_bytes', 'bandwidth'], 0);
+
+        return $total ?: $sent + $rcvd;
+    }
+
+    /** Pemakaian bandwidth per user / IP. */
+    public function bandwidthPerUser(string $period = 'realtime'): array
+    {
+        return collect($this->fortiview('source', $period, 100))
+            ->map(fn ($r) => [
+                'user' => (string) self::pick($r, ['user', 'username', 'unauthuser', 'srcname'], ''),
+                'ip' => (string) self::pick($r, ['srcip', 'source', 'ip', 'srcaddr'], '-'),
+                'device' => (string) self::pick($r, ['hostname', 'srchost', 'devname', 'osname', 'srcmac', 'mac'], ''),
+                'download' => (int) self::pick($r, ['rcvdbyte', 'rcvd_bytes', 'rx_bytes'], 0),
+                'upload' => (int) self::pick($r, ['sentbyte', 'sent_bytes', 'tx_bytes'], 0),
+                'bytes' => self::bytesOf($r),
+                'sessions' => (int) self::pick($r, ['sessions', 'session_count', 'count'], 0),
+            ])
+            ->sortByDesc('bytes')->values()->all();
+    }
+
+    /** Website yang paling sering dibuka. */
+    public function topWebsites(string $period = 'realtime'): array
+    {
+        try {
+            $rows = $this->fortiview('website', $period, 100);
+        } catch (RuntimeException) {
+            $rows = $this->fortiview('domain', $period, 100);
+        }
+
+        return collect($rows)
+            ->map(fn ($r) => [
+                'domain' => (string) self::pick($r, ['website', 'domain', 'hostname', 'host', 'dstname'], '-'),
+                'category' => (string) self::pick($r, ['catdesc', 'category_name', 'category'], ''),
+                'sessions' => (int) self::pick($r, ['sessions', 'hits', 'count', 'session_count'], 0),
+                'bytes' => self::bytesOf($r),
+            ])
+            ->sortByDesc('bytes')->values()->all();
+    }
+
+    /** Aplikasi dengan trafik terbesar. */
+    public function topApplications(string $period = 'realtime'): array
+    {
+        return collect($this->fortiview('application', $period, 100))
+            ->map(fn ($r) => [
+                'app' => (string) self::pick($r, ['app_name', 'appname', 'application', 'app'], '-'),
+                'category' => (string) self::pick($r, ['appcat', 'app_cat', 'category'], ''),
+                'risk' => (string) self::pick($r, ['apprisk', 'risk'], ''),
+                'sessions' => (int) self::pick($r, ['sessions', 'session_count', 'count'], 0),
+                'bytes' => self::bytesOf($r),
+            ])
+            ->sortByDesc('bytes')->values()->all();
+    }
+
+    /**
+     * Log terbaru dari Fortigate. Dicoba dari disk, lalu memory.
+     * $type: virus | webfilter | ips | app-ctrl | ...
+     */
+    public function logs(string $type, int $rows = 200): array
+    {
+        $lastError = null;
+        foreach (['disk', 'memory'] as $device) {
+            try {
+                $json = $this->get("log/{$device}/{$type}", ['rows' => $rows], 30);
+                if (isset($json['results']) && is_array($json['results'])) {
+                    return array_values(array_filter($json['results'], 'is_array'));
+                }
+            } catch (RuntimeException $e) {
+                $lastError = $e;
+                if (str_contains($e->getMessage(), 'token') || str_contains($e->getMessage(), 'terhubung')) {
+                    throw $e; // masalah koneksi / token: tidak perlu coba lokasi log lain
+                }
+            }
+        }
+        if ($lastError) {
+            throw new RuntimeException('Log tidak tersedia. Pastikan logging ' . $type . ' aktif (disk/memory) dan profil keamanan dipasang di policy. ' . $lastError->getMessage());
+        }
+
+        return [];
+    }
+
+    protected static function logTime(array $r): string
+    {
+        $date = self::pick($r, ['date'], '');
+        $time = self::pick($r, ['time'], '');
+        if ($date || $time) {
+            return trim("{$date} {$time}");
+        }
+        $ts = self::pick($r, ['eventtime', '_metadata.timestamp'], null);
+        if (is_numeric($ts)) {
+            $ts = (int) $ts;
+            $ts = $ts > 1e15 ? intdiv($ts, 1000000000) : ($ts > 1e12 ? intdiv($ts, 1000) : $ts);
+            return date('Y-m-d H:i:s', $ts);
+        }
+
+        return '';
+    }
+
+    protected static function logUser(array $r): string
+    {
+        return (string) self::pick($r, ['user', 'unauthuser', 'srcname', 'srcip'], '-');
+    }
+
+    /** Virus / malware yang terdeteksi. */
+    public function virusLogs(): array
+    {
+        return collect($this->logs('virus'))
+            ->map(fn ($r) => [
+                'time' => self::logTime($r),
+                'user' => self::logUser($r),
+                'ip' => (string) self::pick($r, ['srcip'], ''),
+                'virus' => (string) self::pick($r, ['virus', 'attack', 'ref'], '-'),
+                'file' => (string) self::pick($r, ['filename', 'url', 'hostname'], ''),
+                'action' => (string) self::pick($r, ['action'], ''),
+            ])
+            ->sortByDesc('time')->values()->all();
+    }
+
+    /** Akses web yang diblokir / diperingatkan web filter. */
+    public function webFilterLogs(): array
+    {
+        return collect($this->logs('webfilter'))
+            ->map(fn ($r) => [
+                'time' => self::logTime($r),
+                'user' => self::logUser($r),
+                'ip' => (string) self::pick($r, ['srcip'], ''),
+                'url' => trim(self::pick($r, ['hostname'], '') . self::pick($r, ['url'], '')) ?: '-',
+                'category' => (string) self::pick($r, ['catdesc', 'cat'], ''),
+                'action' => (string) self::pick($r, ['action'], ''),
+            ])
+            ->sortByDesc('time')->values()->all();
+    }
+
+    /** Serangan yang terdeteksi IPS. */
+    public function ipsLogs(): array
+    {
+        return collect($this->logs('ips'))
+            ->map(fn ($r) => [
+                'time' => self::logTime($r),
+                'source' => (string) self::pick($r, ['srcip'], '-'),
+                'target' => (string) self::pick($r, ['dstip'], '-'),
+                'attack' => (string) self::pick($r, ['attack', 'msg'], '-'),
+                'severity' => (string) self::pick($r, ['severity', 'crlevel', 'level'], ''),
+                'action' => (string) self::pick($r, ['action'], ''),
+            ])
+            ->sortByDesc('time')->values()->all();
+    }
+
+    /** User yang sedang login di firewall (FSSO / captive portal / dll.). */
+    public function firewallUsers(): array
+    {
+        return collect(self::rowsFrom($this->get('monitor/user/firewall')))
+            ->map(fn ($u) => [
+                'user' => (string) self::pick($u, ['username', 'user_name', 'name'], '-'),
+                'ip' => (string) self::pick($u, ['ipaddr', 'ip', 'src_ip'], '-'),
+                'method' => (string) self::pick($u, ['method', 'type', 'auth_type'], ''),
+                'duration' => ($d = self::pick($u, ['duration'], null)) !== null ? gmdate('H:i:s', (int) $d) : '',
+                'bytes' => (int) self::pick($u, ['traffic_vol_bytes', 'traffic', 'bytes'], 0),
+            ])
+            ->sortByDesc('bytes')->values()->all();
+    }
+
     /**
      * Cek banyak perangkat sekaligus (paralel) dan simpan hasilnya di kolom last_*.
      *

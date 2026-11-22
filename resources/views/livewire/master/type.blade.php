@@ -7,7 +7,7 @@
                         <div class="d-flex justify-content-between">
                             <h5 class="mb-0">Manajemen Tipe Aset</h5>
                             <button wire:click="create()" class="btn btn-primary btn-sm">
-                                <i class="fas fa-plus me-1"></i> Buat Tipe Aset Baru
+                                <i class="bx bx-plus me-1"></i> Buat Tipe Aset Baru
                             </button>
                         </div>
                         @if (session()->has('message'))

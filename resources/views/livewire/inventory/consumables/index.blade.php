@@ -1,5 +1,10 @@
-<div class="container">
-    <h4 class="mb-4">Stok Part Per Jobsite</h4>
+<div class="container-fluid py-4">
+    <div class="page-header">
+      <div>
+        <h4 class="mb-1">Stok Part Per Jobsite</h4>
+      </div>
+    </div>
+    
     
     <div class="row mb-4">
         <div class="col-md-4">
@@ -46,13 +51,13 @@
                         </td>
                         <td class="text-center">
                             <button class="btn btn-sm btn-success me-1" wire:click="openTransactionModal({{ $part->id }}, 'IN')">
-                                <i class="fas fa-arrow-up"></i> Masuk
+                                <i class="bx bx-up-arrow-alt"></i> Masuk
                             </button>
                             <button class="btn btn-sm btn-warning me-1" wire:click="openTransactionModal({{ $part->id }}, 'OUT')">
-                                <i class="fas fa-arrow-down"></i> Keluar
+                                <i class="bx bx-down-arrow-alt"></i> Keluar
                             </button>
                             <button class="btn btn-sm btn-info" wire:click="showMutation({{ $part->id }})">
-                                <i class="fas fa-history"></i> Mutasi
+                                <i class="bx bx-history"></i> Mutasi
                             </button>
                         </td>
                     </tr>

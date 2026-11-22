@@ -1,15 +1,17 @@
 <div>
     <div class="container-fluid py-4">
-        <div class="card">
-            <div class="card-header">
-                <h5 class="mb-0">Penerimaan & QC Aset (dari PO)</h5>
-                <p class="text-sm mb-0">Daftar item aset yang telah dipesan dan menunggu kedatangan serta pengecekan kualitas.</p>
-            </div>
+        <div class="page-header">
+      <div>
+        <h4 class="mb-1">Penerimaan & QC Aset (dari PO)</h4>
+        <div class="page-subtitle">Daftar item aset yang telah dipesan dan menunggu kedatangan serta pengecekan kualitas.</div>
+      </div>
+    </div>
+    <div class="card">
             <div class="card-body">
                 @if (session()->has('message')) <div class="alert alert-success">{{ session('message') }}</div> @endif
                 
                 <div class="table-responsive">
-                    <table class="table align-items-center mb-0">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
                                 <th>No. Pengajuan</th>
@@ -98,7 +100,7 @@
                                             <option value="">-- Pilih Seri --</option>
                                             @foreach($allSeries as $series) <option value="{{ $series->id }}">{{ $series->name }}</option> @endforeach
                                         </select>
-                                        <button wire:click.prevent="toggleAddNewSeries" type="button" class="btn btn-outline-secondary" title="Tambah Seri Baru"><i class="fas fa-plus"></i></button>
+                                        <button wire:click.prevent="toggleAddNewSeries" type="button" class="btn btn-outline-secondary" title="Tambah Seri Baru"><i class="bx bx-plus"></i></button>
                                     </div>
                                     @error('qc_asset_series_id') <span class="text-danger small">{{ $message }}</span> @enderror
                                 </div>
@@ -123,7 +125,7 @@
 
                         {{-- Bagian untuk Gagal QC --}}
                         <div class="p-3 border rounded">
-                             <h6 class="text-danger"><i class="fas fa-times-circle me-2"></i>Opsi 2: Aset Gagal QC (Return)</h6>
+                             <h6 class="text-danger"><i class="bx bx-x-circle me-2"></i>Opsi 2: Aset Gagal QC (Return)</h6>
                              <p class="small text-muted">Isi form ini jika aset yang diterima tidak sesuai atau rusak.</p>
                              <div class="mb-3">
                                 <label for="qc_failure_reason" class="form-label">Alasan Gagal QC / Return <span class="text-danger">*</span></label>

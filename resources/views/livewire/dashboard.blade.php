@@ -62,7 +62,7 @@
                             <div class="row align-items-center">
                                 <div class="col-md-3 mb-3 mb-md-0">
                                     <label for="jobsiteFilter" class="form-label fw-semibold text-muted mb-2">
-                                        <i class="fas fa-map-marker-alt me-2"></i>Filter Jobsite
+                                        <i class="bx bx-map me-2"></i>Filter Jobsite
                                     </label>
                                     <select wire:model.live="selectedJobsite" id="jobsiteFilter" class="form-select border-0 bg-light">
                                         <option value="">Semua Jobsite</option>
@@ -74,7 +74,7 @@
                                 
                                 <div class="col-md-3 mb-3 mb-md-0">
                                     {{-- <label for="statusFilter" class="form-label fw-semibold text-muted mb-2">
-                                        <i class="fas fa-info-circle me-2"></i>Filter Status
+                                        <i class="bx bx-info-circle me-2"></i>Filter Status
                                     </label> --}}
                                     {{-- <select wire:model.live="selectedStatus" id="statusFilter" class="form-select border-0 bg-light">
                                         <option value="">Semua Status</option>
@@ -87,7 +87,7 @@
                                 
                                 <div class="col-md-3 mb-3 mb-md-0">
                                     {{-- <label for="typeFilter" class="form-label fw-semibold text-muted mb-2">
-                                        <i class="fas fa-tag me-2"></i>Filter Tipe Aset
+                                        <i class="bx bx-purchase-tag me-2"></i>Filter Tipe Aset
                                     </label> --}}
                                     {{-- <select wire:model.live="selectedType" id="typeFilter" class="form-select border-0 bg-light">
                                         <option value="">Semua Tipe</option>
@@ -99,7 +99,7 @@
                                 
                                 <div class="col-md-3 d-flex align-items-end mt-7">
                                     <button wire:click="resetFilters" class="btn btn-outline-secondary w-100">
-                                        <i class="fas fa-refresh me-2"></i>Reset Filter
+                                        <i class="bx bx-refresh me-2"></i>Reset Filter
                                     </button>
                                 </div>
                             </div>
@@ -112,7 +112,7 @@
                 <div class="dashboard-card-col mb-4 d-flex">
                     <div class="dashboard-card w-100">
                         <div class="dashboard-card-header">
-                            <i class="fas fa-chart-pie me-2"></i> Aset Berdasarkan Status
+                            <i class="bx bx-pie-chart-alt-2 me-2"></i> Aset Berdasarkan Status
                         </div>
                         <div class="dashboard-card-body">
                             {{-- Wadah untuk chart --}}
@@ -125,7 +125,7 @@
                 <div class="dashboard-card-col mb-4 d-flex">
                     <div class="dashboard-card w-100">
                         <div class="dashboard-card-header">
-                            <i class="fas fa-layer-group me-2"></i> Top 10 Tipe Aset
+                            <i class="bx bx-layer me-2"></i> Top 10 Tipe Aset
                         </div>
                         <div class="dashboard-card-body">
                             {{-- Wadah untuk chart --}}
@@ -140,7 +140,7 @@
                 <div class="dashboard-card-col mb-4 d-flex">
                     <div class="dashboard-card w-100">
                         <div class="dashboard-card-header">
-                            <i class="fas fa-map-marker-alt me-2"></i> Jumlah Aset per Jobsite
+                            <i class="bx bx-map me-2"></i> Jumlah Aset per Jobsite
                         </div>
                         <div class="dashboard-card-body">
                             {{-- Wadah untuk chart --}}
@@ -153,7 +153,7 @@
                 <div class="dashboard-card-col mb-4 d-flex">
                     <div class="dashboard-card w-100">
                         <div class="dashboard-card-header">
-                            <i class="fas fa-chart-line me-2"></i> Tren Pengajuan Aset (12 Bulan Terakhir)
+                            <i class="bx bx-line-chart me-2"></i> Tren Pengajuan Aset (12 Bulan Terakhir)
                         </div>
                         <div class="dashboard-card-body">
                             {{-- Wadah untuk chart --}}

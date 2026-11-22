@@ -32,23 +32,28 @@ class ItClearanceForm extends Component
 
     public function mount($clearanceId = null)
     {
-        $this->allUsers = User::orderBy('name')->get();
-        // Asumsi Anda bisa memfilter user berdasarkan jabatan/posisi
-        $this->itUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Staff IT%'))->get();
-        $this->kasiItUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Kasi IT%'))->get();
-        $this->kabagIcUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Kabag IC%'))->get();
-
         if ($clearanceId) {
+            $this->loadOptions();
             $this->loadClearance($clearanceId);
         } else {
-            $this->createNewForm();
+            $this->createNewForm(); // sudah memuat dropdown
         }
+    }
+
+    /** Data dropdown. */
+    protected function loadOptions(): void
+    {
+        // Hanya kolom yang ditampilkan di dropdown (dulu seluruh kolom ribuan user disimpan di state).
+        $this->allUsers = User::where('is_active', true)->orderBy('name')->get(['id', 'name', 'nik']);
+        $this->itUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Staff IT%'))->orderBy('name')->get(['id', 'name']);
+        $this->kasiItUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Kasi IT%'))->orderBy('name')->get(['id', 'name']);
+        $this->kabagIcUsers = User::whereHas('position', fn($q) => $q->where('name', 'like', '%Kabag IC%'))->orderBy('name')->get(['id', 'name']);
     }
 
     public function createNewForm()
     {
         $this->reset();
-        $this->mount(); // Muat ulang data dropdown
+        $this->loadOptions(); // dulu memanggil mount() → mount() memanggil createNewForm() lagi: berulang tanpa akhir
         $this->checkDate = now()->format('Y-m-d');
         $this->checkedByUserId = Auth::id(); // Default ke user login
         $this->checklistItems = $this->getStandardAccessItems(); // Mulai dengan item standar

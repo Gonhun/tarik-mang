@@ -2,15 +2,13 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <div class="card">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Manajemen Jabatan</h5>
-                            <button wire:click="create()" class="btn btn-primary btn-sm">
-                                <i class="fas fa-plus me-1"></i> Tambah Jabatan Baru
-                            </button>
-                        </div>
-                        @if (session()->has('message'))
+                <div class="page-header">
+            <div><h4 class="mb-1">Jabatan</h4></div>
+            <div class="d-flex flex-wrap gap-2"><button wire:click="create()" class="btn btn-primary btn-sm">
+                                <i class="bx bx-plus me-1"></i> Tambah Jabatan Baru
+                            </button></div>
+        </div>
+@if (session()->has('message'))
                             <div class="alert alert-success mt-3" role="alert">
                                 {{ session('message') }}
                             </div>
@@ -20,11 +18,9 @@
                                 {{ session('error') }}
                             </div>
                         @endif
-                    </div>
-                    <div class="card-body px-0 pt-0 pb-2">
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari Level Jabatan...">
-                        </div>
+        <div class="card">
+            <div class="card-body px-0 pt-0 pb-2">
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari Level Jabatan..."></div></div>
                         <div class="px-4 pt-3 d-flex align-items-center justify-content-end">
                             <label for="perPage" class="me-2 mb-0 text-secondary small">Tampilkan</label>
                             <select id="perPage" wire:model.live="perPage" class="form-select form-select-sm w-auto d-inline-block me-2">
@@ -36,17 +32,17 @@
                             <span class="text-secondary small">data per halaman</span>
                         </div>
                         <div class="table-responsive p-0 mt-3">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Nama Level Jabatan</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th>Nama Level Jabatan</th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($positionlevels as $positionlevel)
                                         <tr>
-                                            <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $positionlevel->name }}</p></td>
+                                            <td>{{ $positionlevel->name }}</td>
                                             
                                            
                                             

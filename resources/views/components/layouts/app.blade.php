@@ -5,7 +5,7 @@
         'dashboard' => 'Dashboard', 'my.asset' => 'Aset Saya', 'myprofil' => 'Profil Saya',
         'asset-requests.*' => 'Permintaan Aset', 'requests.license.*' => 'Permintaan Lisensi',
         'asset.index' => 'Inventaris Aset', 'assets.show' => 'Detail Aset', 'asset.bast' => 'Serah Terima Aset',
-        'asset.pengembalian' => 'Pengembalian Aset', 'asset.qc' => 'QC Aset Baru',
+        'asset.pengembalian' => 'Pengembalian Aset', 'asset.qc' => 'QC Aset Baru', 'asset.holders*' => 'Pemegang Aset',
         'asset.mutasi-status' => 'Detail Transaksi', 'asset.mutasi' => 'Mutasi Aset', 'asset.loans' => 'Peminjaman Aset',
         'asset.damage' => 'Kerusakan Aset', 'asset.disposed' => 'Disposal Aset', 'asset.opname*' => 'Stock Opname',
         'asset.labels*' => 'Cetak Label QR', 'coa.index' => 'Master COA', 'forecast.*' => 'Forecast',
@@ -16,7 +16,7 @@
         'admin.asset-type' => 'Tipe Aset', 'admin.asset-brand' => 'Merek Aset', 'admin.asset-series' => 'Seri & Spesifikasi',
         'admin.jobsites' => 'Jobsite', 'admin.dept' => 'Departemen', 'admin.entitas' => 'Entitas', 'cc.cost-center' => 'Cost Center',
         'admin.workflow.types' => 'Jenis Transaksi', 'admin.workflow*' => 'Workflow Validasi',
-        'admin.fortigate*' => 'Fortigate', 'admin.wa' => 'WhatsApp', 'admin.logs' => 'Audit Log',
+        'admin.fortigate*' => 'Fortigate', 'admin.wa' => 'WhatsApp', 'admin.logs' => 'Audit Log', 'admin.login-settings' => 'Tampilan Login',
         'Isr.*' => 'Billing ISR', 'task.*' => 'Task', 'tickets.*' => 'Tiket', 'organization-chart' => 'Struktur Organisasi',
     ];
     $pageTitle = $title ?? collect($routeTitles)->first(fn ($label, $pattern) => request()->routeIs($pattern)) ?? 'AMS IT OPS';

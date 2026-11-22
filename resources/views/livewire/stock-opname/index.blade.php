@@ -6,7 +6,7 @@
             <p class="text-muted mb-0">Periksa fisik aset per site dengan scan QR label atau barcode SN. Aset yang tidak terscan muncul sebagai "belum ditemukan".</p>
         </div>
         <div class="d-flex gap-2">
-            <a href="{{ route('asset.labels') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-printer me-1"></i>Cetak label QR</a>
+            @can('Cetak Label')<a href="{{ route('asset.labels') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-printer me-1"></i>Cetak label QR</a>@endcan
             <button wire:click="create" class="btn btn-primary btn-sm"><i class="bx bx-plus me-1"></i>Mulai stock opname</button>
         </div>
     </div>

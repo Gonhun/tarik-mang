@@ -98,7 +98,7 @@
                 @if (!empty($usersForManagerSelection))
                 <option value="">---PILIH ATASAN---</option>
                 @foreach ($usersForManagerSelection as $managerOption)
-                    <option value="{{ $managerOption->id }}">{{$managerOption->name}} ['{{ $managerOption->nik }}','{{ $managerOption->department->code }}','{{ $managerOption->position->name }}']</option>
+                    <option value="{{ $managerOption->id }}">{{ $managerOption->name }} · {{ $managerOption->nik }}{{ $managerOption->department ? ' · ' . $managerOption->department->code : '' }}{{ $managerOption->position ? ' · ' . $managerOption->position->name : '' }}</option>
                 @endforeach
                 @endif
             </select>
@@ -107,11 +107,11 @@
           </div>
           <div class="col-md-6">
             <label for="address" class="form-label">Departement</label>
-            <input type="text" class="form-control" id="address" disabled name="address" value="{{ $user->department->name }}" placeholder="Address" readonly/>
+            <input type="text" class="form-control" id="address" disabled name="address" value="{{ $user->department->name ?? '-' }}" placeholder="Address" readonly/>
           </div>
           <div class="col-md-6">
             <label for="state" class="form-label">Jabatan</label>
-            <input class="form-control" type="text" disabled id="state" name="state" placeholder="California" value="{{ $user->karyawans->name }}" readonly/>
+            <input class="form-control" type="text" disabled id="state" name="state" placeholder="California" value="{{ $user->karyawans->name ?? '-' }}" readonly/>
           </div>
           {{-- <div class="col-md-6">
             <label class="form-label" for="inputGroupFile01">Struktur Organisasi</label>

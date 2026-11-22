@@ -23,11 +23,23 @@ return [
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
+    // Asisten chat AMS lewat 9Router (API kompatibel OpenAI: {url}/chat/completions).
+    'ai' => [
+        'url' => rtrim((string) env('AI_BASE_URL', 'http://localhost:20128/v1'), '/'),
+        'key' => env('AI_API_KEY'),
+        'model' => env('AI_MODEL'),
+        'timeout' => (int) env('AI_TIMEOUT', 90),
+        'verify_ssl' => (bool) env('AI_VERIFY_SSL', true),
+    ],
+
     // WhatsApp gateway (scan QR di Integrasi > WhatsApp). Dipakai oleh sendMessageWithWhatsApp().
     'whatsapp' => [
         'url' => rtrim((string) env('WHATSAPP_API_URL', ''), '/'),
         'key' => env('WHATSAPP_API_KEY'),
         'instance' => env('WHATSAPP_INSTANCE', 'ams'),
+        // Awalan kode pairing kustom (6 karakter) + 2 angka acak. Butuh gateway yang meneruskan
+        // parameter `pairingCode` ke Baileys; bila tidak, gateway tetap memberi kode acak.
+        'pairing_prefix' => env('WHATSAPP_PAIRING_PREFIX', 'MAM0RV'),
         'verify_ssl' => (bool) env('WHATSAPP_VERIFY_SSL', true),
     ],
 

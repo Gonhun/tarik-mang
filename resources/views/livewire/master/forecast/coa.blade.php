@@ -2,7 +2,13 @@
     <div class="container-fluid py-4">
         <div class="row">
             <div class="col-12">
-                <nav>
+                <div class="page-header">
+      <div>
+        <h4 class="mb-1">Master COA</h4>
+        <div class="page-subtitle">Chart of account, pivot anggaran, dan forecast aset per jobsite.</div>
+      </div>
+    </div>
+    <nav>
                     <div class="nav nav-tabs" id="coaTab" role="tablist">
                         <button class="nav-link active" id="pivot-tab" data-bs-toggle="tab"
                             data-bs-target="#pivot-tab-pane" type="button" role="tab" aria-controls="pivot-tab-pane"

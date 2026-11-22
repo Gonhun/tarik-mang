@@ -8,10 +8,10 @@
                             <h5 class="mb-2 mb-md-0">Manajemen Transaksi Aset</h5>
                             <div>
                                 <button wire:click="create('HANDOVER')" class="btn btn-success btn-sm mb-1 mb-md-0 me-md-1">
-                                    <i class="fas fa-plus me-1"></i> Buat BAST Serah Terima
+                                    <i class="bx bx-plus me-1"></i> Buat BAST Serah Terima
                                 </button>
                                 <button wire:click="create('RETURN')" class="btn btn-info btn-sm mb-1 mb-md-0">
-                                    <i class="fas fa-undo me-1"></i> Buat BA Pengembalian
+                                    <i class="bx bx-undo me-1"></i> Buat BA Pengembalian
                                 </button>
                                 {{-- Tambahkan tombol untuk jenis transaksi lain di sini --}}
                             </div>
@@ -28,29 +28,27 @@
                         @endif
                     </div>
                     <div class="card-body px-0 pt-0 pb-2">
-                        <div class="px-4 pt-3">
-                            <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari No. Transaksi, User, Tipe...">
-                        </div>
+                        <div class="px-4 pt-3"><div class="input-group input-group-merge" style="max-width: 380px"><span class="input-group-text"><i class="bx bx-search"></i></span><input wire:model.live.debounce.500ms="search" type="search" class="form-control" placeholder="Cari No. Transaksi, User, Tipe..."></div></div>
                         <div class="table-responsive p-0">
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">No. Transaksi</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Tgl Transaksi</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Jenis</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Dari User</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Kepada User</th>
+                                        <th>No. Transaksi</th>
+                                        <th>Tgl Transaksi</th>
+                                        <th>Jenis</th>
+                                        <th>Dari User</th>
+                                        <th>Kepada User</th>
                                         <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Item</th>
                                         <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Status</th>
                                         <th class="text-center text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">Dokumen</th>
-                                        <th class="text-secondary opacity-7"></th>
+                                        <th class="text-end">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($transactions as $transaction) {{-- Asumsi var $transactions dari komponen --}}
                                         <tr>
-                                            <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $transaction->transaction_number }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ \Carbon\Carbon::parse($transaction->transaction_date)->isoFormat('D MMM YYYY') }}</p></td>
+                                            <td>{{ $transaction->transaction_number }}</td>
+                                            <td>{{ \Carbon\Carbon::parse($transaction->transaction_date)->isoFormat('D MMM YYYY') }}</td>
                                             <td>
                                                 <span class="badge badge-sm bg-gradient-primary">
                                                     @if($transaction->transaction_type == 'HANDOVER') Serah Terima
@@ -60,8 +58,8 @@
                                                     @endif
                                                 </span>
                                             </td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $transaction->fromUser->name ?? 'N/A' }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $transaction->toUser->name ?? 'N/A' }}</p></td>
+                                            <td>{{ $transaction->fromUser->name ?? 'N/A' }}</td>
+                                            <td>{{ $transaction->toUser->name ?? 'N/A' }}</td>
                                             <td class="text-center"><span class="badge bg-secondary">{{ $transaction->items_count ?? $transaction->items->count() }}</span></td>
                                             <td class="text-center">
                                                 <span class="badge bg-gradient-{{ $transaction->status == 'Completed' || $transaction->status == 'Processed' ? 'success' : ($transaction->status == 'Draft' || $transaction->status == 'Pending Inspection' ? 'info' : 'warning') }}">

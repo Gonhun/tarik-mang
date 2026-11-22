@@ -14,12 +14,12 @@
                 </li> --}}
                 {{-- <li class="nav-item">
                     <a class="nav-link mb-0 px-0 py-1" data-bs-toggle="tab" href="#menu2" role="tab" aria-selected="false">
-                        <i class="fas fa-cog me-1"></i> Menu 2
+                        <i class="bx bx-cog me-1"></i> Menu 2
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link mb-0 px-0 py-1" data-bs-toggle="tab" href="#menu3" role="tab" aria-selected="false">
-                        <i class="fas fa-chart-bar me-1"></i> Menu 3
+                        <i class="bx bx-bar-chart-alt-2 me-1"></i> Menu 3
                     </a>
                 </li> --}}
             </ul>
@@ -81,20 +81,20 @@
                                 <span class="spinner-border spinner-border-sm" role="status"></span>
                             </div>
                            
-                            <table class="table align-items-center mb-0">
+                            <table class="table table-hover mb-0">
                                 <thead>
                                     <tr>
                                         <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ">#</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Name</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Enable</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Action</th>
+                                        <th>Name</th>
+                                        <th>Enable</th>
+                                        <th>Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @forelse ($softwareCollection as $sofware)
                                         <tr>
                                             <td>{{ $loop->iteration }}</td> 
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $sofware->name ?? 'N/A' }}</p></td>
+                                            <td>{{ $sofware->name ?? 'N/A' }}</td>
                                             <td>
                                                 <input 
                                                     class="form-check-input" type="checkbox"

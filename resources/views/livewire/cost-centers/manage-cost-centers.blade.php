@@ -1,36 +1,36 @@
 <div>
     <div class="container-fluid py-4">
-        <div class="card">
-            <div class="card-header pb-2">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">Manajemen Cost Center</h5>
-                    <button wire:click="create()" class="btn btn-primary btn-sm">
+        <div class="page-header">
+      <div>
+        <h4 class="mb-1">Cost Center</h4>
+      </div>
+      <div class="d-flex flex-wrap gap-2"><button wire:click="create()" class="btn btn-primary btn-sm">
                         <i class="bx bx-bookmark-plus  me-1"></i> Tambah Cost Center
-                    </button>
-                </div>
-                 @if (session()->has('message'))<div class="alert alert-success mt-3">{{ session('message') }}</div>@endif
+                    </button></div>
+    </div>
+    @if (session()->has('message'))<div class="alert alert-success mt-3">{{ session('message') }}</div>@endif
                  @if (session()->has('error'))<div class="alert alert-danger mt-3">{{ session('error') }}</div>@endif
-            </div>
+    <div class="card">
             <div class="card-body">
                 <div class="mb-3">
                     <input wire:model.live.debounce.500ms="search" type="text" class="form-control" placeholder="Cari No. Cost Center, Nama, Jobsite, atau Departemen...">
                 </div>
                 <div class="table-responsive">
-                    <table class="table align-items-center mb-0">
+                    <table class="table table-hover mb-0">
                         <thead>
                             <tr>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">No. Cost Center</th>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Jobsite</th>
-                                <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Departemen</th>
-                                <th class="text-secondary opacity-7"></th>
+                                <th>No. Cost Center</th>
+                                <th>Jobsite</th>
+                                <th>Departemen</th>
+                                <th class="text-end">Aksi</th>
                             </tr>
                         </thead>
                         <tbody>
                             @forelse ($costCenters as $cc)
                                 <tr>
-                                    <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $cc->cost_center_number }}</p></td>
-                                    <td><p class="text-xs font-weight-bold mb-0">{{ $cc->jobsite->name ?? '-' }}</p></td>
-                                    <td><p class="text-xs font-weight-bold mb-0">{{ $cc->department->name ?? '-' }}</p></td>
+                                    <td>{{ $cc->cost_center_number }}</td>
+                                    <td>{{ $cc->jobsite->name ?? '-' }}</td>
+                                    <td>{{ $cc->department->name ?? '-' }}</td>
                                     <td class="align-middle text-end">
                                         <button wire:click="edit({{ $cc->id }})" class="btn btn-link text-secondary mb-0 p-1" title="Edit">
                                             <i class="bx bx-bxs-edit text-sm"></i>

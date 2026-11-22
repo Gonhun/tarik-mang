@@ -22,11 +22,9 @@ class RolesAndPermissionsSeeder extends Seeder
         app()[\Spatie\Permission\PermissionRegistrar::class]->forgetCachedPermissions();
 
         // Buat Permissions (Izin Aksi)
-        Permission::firstOrCreate(['name' => 'Manajement CC']);
         Permission::firstOrCreate(['name' => 'Manajement IT']);
         Permission::firstOrCreate(['name' => 'Manajement Request']);
         Permission::firstOrCreate(['name' => 'Master Asset']);
-        Permission::firstOrCreate(['name' => 'Pengajuan Asset']);
         Permission::firstOrCreate(['name' => 'Mutasi']);
         Permission::firstOrCreate(['name' => 'Add Entitas']);
         Permission::firstOrCreate(['name' => 'Add Jobsites']);
@@ -54,8 +52,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
         $roleManager = Role::firstOrCreate(['name' => 'Administrator CC']);
         $roleManager->givePermissionTo([
-            'Manajement CC',
-            'Pengajuan Asset', // Asumsi manager adalah kabag
+            'Add Cost Center',
             'Manajement Request',    // Asumsi manager adalah PM
             'Mutasi',
             
@@ -63,13 +60,12 @@ class RolesAndPermissionsSeeder extends Seeder
         $roleManager = Role::firstOrCreate(['name' => 'IT']);
         $roleManager->givePermissionTo([
             'Show Dashboard',
-            'Pengajuan Asset', 
             'Manajement Request',  
             'Mutasi',
             'Master Asset'
         ]);
-        $roleStaff = Role::firstOrCreate(['name' => 'Karyawan']);
-        $roleStaff->givePermissionTo('Pengajuan Asset');
+        // Karyawan tidak butuh permission khusus: permintaan aset & aset saya terbuka untuk semua user.
+        Role::firstOrCreate(['name' => 'Karyawan']);
 
         $roleSuperAdmin = Role::firstOrCreate(['name' => 'Administrator']);
         $roleSuperAdmin->givePermissionTo(Permission::all());

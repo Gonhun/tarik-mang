@@ -24,6 +24,8 @@ class Whatsapp extends Component
     #[Locked] public array $server = [];
     #[Locked] public ?string $qr = null;
     #[Locked] public ?string $pairingCode = null;
+    /** Kode kustom yang diminta ke gateway, untuk dibandingkan dengan kode yang benar-benar dibuat. */
+    #[Locked] public ?string $requestedPairingCode = null;
     #[Locked] public int $qrAt = 0;
     public string $pairPhone = '';
 
@@ -97,7 +99,8 @@ class Whatsapp extends Component
 
     protected function requestQr(?string $phone = null): void
     {
-        $result = WhatsAppGateway::connect($phone);
+        $this->requestedPairingCode = $phone ? WhatsAppGateway::customPairingCode() : null;
+        $result = WhatsAppGateway::connect($phone, $this->requestedPairingCode);
         $this->qr = $result['base64'];
         $this->pairingCode = $result['pairingCode'] ?? null;
         $this->qrAt = time();
@@ -111,15 +114,26 @@ class Whatsapp extends Component
     }
 
     /** Alternatif tanpa kamera: kode pairing untuk dimasukkan di HP. */
+    /** Bila nomor diisi tanpa JavaScript (mis. tempel), tetap dinormalkan. */
+    public function updatedPairPhone(): void
+    {
+        $this->resetErrorBag('pairPhone');
+    }
+
     public function pairWithPhone(): void
     {
-        $this->validate(['pairPhone' => 'required|min:9|max:20'], ['pairPhone.required' => 'Isi nomor WhatsApp yang akan dihubungkan.']);
+        // Normalkan juga di server (0812… / 812… / +62 812… → 62812…).
+        $this->pairPhone = PhoneFormat($this->pairPhone);
+        $this->validate(['pairPhone' => ['required', 'regex:/^62\d{8,13}$/']], [
+            'pairPhone.required' => 'Isi nomor WhatsApp yang akan dihubungkan.',
+            'pairPhone.regex' => 'Nomor tidak valid. Contoh: 0812xxxxxxx atau 62812xxxxxxx.',
+        ]);
         $this->errorMessage = '';
         try {
             if ($this->state === 'missing') {
                 WhatsAppGateway::create();
             }
-            $this->requestQr(PhoneFormat($this->pairPhone));
+            $this->requestQr($this->pairPhone);
             if (!$this->pairingCode) {
                 $this->errorMessage = 'Server tidak mengirim kode pairing. Gunakan scan QR.';
             }
