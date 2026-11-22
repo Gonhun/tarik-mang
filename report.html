@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Form Pengajuan Aset Baru</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            color: #333;
+        }
+        .container {
+            width: 800px;
+            margin: 20px auto;
+            border: 1px solid #ccc;
+            padding: 25px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 3px solid #000;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            /* In a real scenario, you would use an <img> tag for the logo */
+            /* For this example, text is used to represent the logo area */
+            text-align: center;
+        }
+        .logo-subtext {
+            font-size: 8px;
+            font-weight: normal;
+        }
+        .form-title {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: center;
+            text-decoration: underline;
+            margin-top: 20px;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .info-table td {
+            padding: 4px;
+            border: 1px solid #000;
+        }
+        .info-table .label {
+            width: 15%;
+        }
+        .info-table .separator {
+            width: 2%;
+            text-align: center;
+        }
+        .main-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .main-table th, .main-table td {
+            border: 1px solid #000;
+            padding: 5px;
+            text-align: center;
+        }
+        .main-table th {
+            background-color: #f2f2f2;
+        }
+        .main-table .text-left {
+            text-align: left;
+        }
+        .main-table .harga-label {
+            font-weight: bold;
+            text-align: center;
+        }
+        .notes-section {
+            margin-top: 15px;
+        }
+        .notes-section ul {
+            list-style-type: '- ';
+            padding-left: 20px;
+            margin-top: 5px;
+        }
+        .notes-section li {
+            padding-bottom: 5px;
+        }
+        .highlight {
+            background-color: yellow;
+        }
+        .signature-section {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            text-align: center;
+        }
+        .signature-block {
+            width: 30%;
+        }
+        .signature-block .name {
+            margin-top: 70px;
+            font-weight: bold;
+            text-decoration: underline;
+        }
+        .signature-block .role {
+            font-size: 11px;
+        }
+        .multi-signature-block {
+             width: 30%;
+        }
+        .multi-signature-block .signature-group {
+            display: flex;
+            justify-content: space-around;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                BSS <br>
+                <span class="logo-subtext">PT BINA SARANA SUKSES<br>DAN PERKASA</span>
+            </div>
+            <div style="width: 80%;">
+                <h2 class="form-title">FORM PENGAJUAN ASET BARU</h2>
+                <table class="info-table">
+                    <tr>
+                        <td class="label">No. Doc</td>
+                        <td class="separator">:</td>
+                        <td>IT0002-05022025-MSJ</td>
+                        <td class="label">Site</td>
+                        <td class="separator">:</td>
+                        <td>Mahakam Sumber Jaya</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Lampiran</td>
+                        <td class="separator">:</td>
+                        <td>3 Halaman</td>
+                        <td class="label">Departemen</td>
+                        <td class="separator">:</td>
+                        <td>IT</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Perihal</td>
+                        <td class="separator">:</td>
+                        <td>Pengajuan Aset New</td>
+                        <td class="label">Tanggal</td>
+                        <td class="separator">:</td>
+                        <td>11/02/2025</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+
+        <p>Dengan hormat, mohon dibantu pengajuan proyektor untuk penunjang presentasi all departement di ruang PKO.</p>
+        <p>Adapun nama, NIK dan kebutuhan aset laptop yang diperlukan adalah sebagai berikut:</p>
+
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>NIK</th>
+                    <th>Jabatan</th>
+                    <th>Aset</th>
+                    <th>Spesifikasi</th>
+                    <th>No Asset</th>
+                    <th>Kondisi</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>I Putu Agus Doni S.</td>
+                    <td>1011024</td>
+                    <td>STAFF IT</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    <td>
+                        <input type="checkbox" id="baik" name="kondisi1"> <label for="baik">Baik</label><br>
+                        <input type="checkbox" id="rusak" name="kondisi1" checked> <label for="rusak">Rusak</label>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th>Aset</th>
+                    <th>Kondisi</th>
+                    <th>Spesifikasi</th>
+                    <th>Note</th>
+                    <th>Paraf IT</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td rowspan="2" class="text-left">Aset</td>
+                    <td>New</td>
+                    <td>Proyektor EPSON EB-500</td>
+                    <td>6000000723</td>
+                    <td rowspan="2"></td>
+                </tr>
+                <tr>
+                    <td colspan="2" class="harga-label">Harga Aset</td>
+                    <td>Rp.6.500.000</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th colspan="2">Check List</th>
+                    <th>Check Point</th>
+                    <th>Noted</th>
+                    <th>Paraf</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="width:10%; text-align:left;">
+                        <input type="checkbox" id="new_hire" disabled> <label for="new_hire">New hire</label><br>
+                        <input type="checkbox" id="existing" checked disabled> <label for="existing">Existing</label>
+                    </td>
+                    <td style="width:15%"></td>
+                    <td>MPP(HC)</td>
+                    <td>Status Karyawan : Karyawan Tetap</td>
+                    <td style="width:15%"></td>
+                </tr>
+                <tr>
+                    <td style="width:10%; text-align:left;">
+                        <input type="checkbox" id="masuk" checked disabled> <label for="masuk">Masuk</label><br>
+                        <input type="checkbox" id="diluar" disabled> <label for="diluar">Diluar</label>
+                    </td>
+                    <td style="width:15%"></td>
+                    <td>Budget(CC)</td>
+                    <td>On Budget FEBRUARI 2025<br>Periode : </td>
+                    <td style="width:15%"></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="notes-section">
+            <strong>Noted:</strong>
+            <ul>
+                <li>Melampirkan Struktur Departemen terkait (<span class="highlight">Yang sudah tervalidasi</span>).</li>
+                <li><span class="highlight">Melampirkan KPI/Jobdesk</span> (Berupa screenshoot dashboard atau bukti lainya).</li>
+                <li>Jika diluar budget, maka wajib melampirkan <span class="highlight">Berita Acara Cost Diluar Budget</span> dengan persetujuan Kadept masing-masing.</li>
+                <li><span class="highlight">Jika sudah memiliki aset wajib melampirkan kondisi aset sebelumnya.</span></li>
+                <li>Jika terjadi kerusakan/kehilangan pada aset existing maka wajib melampirkan BA kerusakan/kehilangan barang dan bukti kerusakanya.</li>
+            </ul>
+        </div>
+        <table >
+            <thead>
+                <tr>
+                    <th colspan="1">Diajukan Oleh,</th>
+                    <th colspan="4">Diketahui Oleh,</th>
+                    <th colspan="2">Disetujui Oleh,</th>
+                </tr>
+            </thead>
+            <tbody>
+               
+                <tr>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Priyo Hanggoro Bagus S</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Wahyuda F.K</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Danang S.</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Dyas Aditya P.</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Safrizal</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Jinki Tona</div>
+                    </td>
+                    <td style="width:15%; text-align:center; height: 100px;">
+                        <div style="display: flex; justify-content: center; align-items: flex-end; height: 100%;">Sunarno</div>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="width:15%; text-align:center;">
+                        Staff IT
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        Project Manager
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        Kadep CC
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        PJO IT
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        Kasi IT
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        Direktur IT
+                    </td>
+                    <td style="width:15%; text-align:center;">
+                        Direktur
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+
+</body>
+</html>
