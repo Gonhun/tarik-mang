@@ -34,11 +34,15 @@ class MenuItem extends Component
      */
     public $badgeCount = 0;
 
+    /** Status aktif dihitung sekali saat halaman dimuat (saat poll, request-nya adalah request Livewire). */
+    public bool $active = false;
+
     /**
      * Dijalankan saat komponen pertama kali dimuat.
      */
-    public function mount($routeName, $label, $badgeType = null,$icon = null)
+    public function mount($routeName, $label, $badgeType = null, $icon = null, $activePattern = null)
     {
+        $this->active = request()->routeIs($activePattern ?? $routeName);
         $this->routeName = $routeName;
         $this->label = $label;
         $this->badgeType = $badgeType;

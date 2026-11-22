@@ -1,171 +1,122 @@
 <!doctype html>
-
+@php
+    // Judul halaman: dari #[Title] komponen bila ada, kalau tidak dari nama route.
+    $routeTitles = [
+        'dashboard' => 'Dashboard', 'my.asset' => 'Aset Saya', 'myprofil' => 'Profil Saya',
+        'asset-requests.*' => 'Permintaan Aset', 'requests.license.*' => 'Permintaan Lisensi',
+        'asset.index' => 'Inventaris Aset', 'assets.show' => 'Detail Aset', 'asset.bast' => 'Serah Terima Aset',
+        'asset.pengembalian' => 'Pengembalian Aset', 'asset.qc' => 'QC Aset Baru',
+        'asset.mutasi-status' => 'Detail Transaksi', 'asset.mutasi' => 'Mutasi Aset', 'asset.loans' => 'Peminjaman Aset',
+        'asset.damage' => 'Kerusakan Aset', 'asset.disposed' => 'Disposal Aset', 'asset.opname*' => 'Stock Opname',
+        'asset.labels*' => 'Cetak Label QR', 'coa.index' => 'Master COA', 'forecast.*' => 'Forecast',
+        'request.asset-prsap' => 'PR & No. Akuntansi', 'request.asset-po' => 'Purchase Order',
+        'request.asset-po-returns' => 'Retur QC', 'licenses.*' => 'Lisensi', 'software.main' => 'Software',
+        'admin.users' => 'Daftar User', 'admin.roles-permissions' => 'Role & Permission',
+        'admin.jabatan.levels' => 'Level Jabatan', 'admin.jabatan' => 'Jabatan', 'admin.standar-asset' => 'Standar Aset Jabatan',
+        'admin.asset-type' => 'Tipe Aset', 'admin.asset-brand' => 'Merek Aset', 'admin.asset-series' => 'Seri & Spesifikasi',
+        'admin.jobsites' => 'Jobsite', 'admin.dept' => 'Departemen', 'admin.entitas' => 'Entitas', 'cc.cost-center' => 'Cost Center',
+        'admin.workflow.types' => 'Jenis Transaksi', 'admin.workflow*' => 'Workflow Validasi',
+        'admin.fortigate*' => 'Fortigate', 'admin.wa' => 'WhatsApp', 'admin.logs' => 'Audit Log',
+        'Isr.*' => 'Billing ISR', 'task.*' => 'Task', 'tickets.*' => 'Tiket', 'organization-chart' => 'Struktur Organisasi',
+    ];
+    $pageTitle = $title ?? collect($routeTitles)->first(fn ($label, $pattern) => request()->routeIs($pattern)) ?? 'AMS IT OPS';
+@endphp
 <html
-  lang="en"
+  lang="id"
   class="layout-menu-fixed layout-compact"
-  data-assets-path="{{ asset('assets') }}"
+  data-assets-path="{{ asset('assets') }}/"
   data-template="vertical-menu-template-free">
   <head>
     <meta charset="utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
 
-    <title>{{$title ?? 'AMS System'}}</title>
+    <title>{{ $pageTitle === 'AMS IT OPS' ? $pageTitle : $pageTitle . ' · AMS IT OPS' }}</title>
+    <meta name="description" content="Asset Management System IT Operations" />
 
-    <meta name="description" content="" />
-
-    <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="{{ asset('assets/img/favicon/favicon.ico') }}" />
-
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
 
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500;1,600;1,700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
       rel="stylesheet" />
-
     <link rel="stylesheet" href="{{ asset('assets/vendor/fonts/iconify-icons.css') }}" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" />
 
     <!-- Core CSS -->
-    <!-- build:css assets/vendor/css/theme.css  -->
-
     <link rel="stylesheet" href="{{ asset('assets/vendor/css/core.css') }}" />
     <link rel="stylesheet" href="{{ asset('assets/css/demo.css') }}" />
 
     <!-- Vendors CSS -->
     <link rel="stylesheet" href="{{ asset('assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.css') }}" />
-    <script src="https://cdn.jsdelivr.net/npm/apextree"></script>
-    <!-- endbuild -->
-    {{-- <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script> --}}
     <link rel="stylesheet" href="{{ asset('assets/vendor/libs/apex-charts/apex-charts.css') }}" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" />
 
-    <!-- Page CSS -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css">
-    <!-- Helpers -->
+    <!-- Gaya global aplikasi (dimuat terakhir agar bisa merapikan template) -->
+    <link rel="stylesheet" href="{{ asset('assets/css/app.css') }}?v={{ filemtime(public_path('assets/css/app.css')) }}" />
+
+    <!-- Helpers & config template (wajib di head) -->
     <script src="{{ asset('assets/vendor/js/helpers.js') }}"></script>
-    <!--! Template customizer & Theme config files MUST be included after core stylesheets and helpers.js in the <head> section -->
-      <script src="
-      https://cdn.jsdelivr.net/npm/@rive-app/canvas@2.30.4/rive.min.js
-      "></script>
-    <!--? Config:  Mandatory theme config file contain global vars & default theme options, Set your preferred theme option in this file.  -->
-    
     <script src="{{ asset('assets/js/config.js') }}"></script>
-    <!-- Move jQuery ABOVE Select2 and Bootstrap to avoid ReferenceError -->
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
     @livewireStyles
+    @stack('styles')
   </head>
 
   <body>
-    <!-- Layout wrapper -->
-   
     <div class="layout-wrapper layout-content-navbar">
       <div class="layout-container">
-        <!-- Menu -->
-        
-          @include('components.aside')
-        <!-- / Menu -->
+        @include('components.aside')
 
-        <!-- Layout container -->
         <div class="layout-page">
-          <!-- Navbar -->
-         
-            @include('components.nav')
-        
-          <!-- / Navbar -->
-          <!-- Content wrapper -->
+          @include('components.nav')
+
           <div class="content-wrapper">
-            <!-- Content -->
             {{ $slot }}
-            <!-- / Content -->
-            
-              <livewire:chat.widget />
-            
-            
-            <!-- Footer -->
+
+            <livewire:chat.widget />
+
             <footer class="content-footer footer bg-footer-theme">
               <div class="container-xxl">
-                <div
-                  class="footer-container d-flex align-items-center justify-content-between py-4 flex-md-row flex-column">
-                  <div class="mb-2 mb-md-0">
-                    ©
-                    <script>
-                      document.write(new Date().getFullYear());
-                    </script>
-                    , made with ❤️ by
-                    <a href="https://binasaranasukses.co.id" target="_blank" class="footer-link">PT Bina Sarana Sukses</a>
+                <div class="footer-container d-flex align-items-center justify-content-between py-3 flex-md-row flex-column gap-1">
+                  <div class="text-body-secondary small">
+                    © {{ date('Y') }} <a href="https://binasaranasukses.co.id" target="_blank" rel="noopener" class="footer-link fw-medium">PT Bina Sarana Sukses</a>
+                    · IT Operations
                   </div>
-                  <div class="d-none d-lg-inline-block">
-
-                    <a
-                      href="https://demos.themeselection.com/sneat-bootstrap-html-admin-template/documentation/"
-                      target="_blank"
-                      class="footer-link me-4"
-                      >Documentation</a
-                    >
-
-                  </div>
+                  <div class="text-body-secondary small d-none d-md-block">AMS IT OPS</div>
                 </div>
               </div>
             </footer>
-            <!-- / Footer -->
 
             <div class="content-backdrop fade"></div>
           </div>
-          <!-- Content wrapper -->
         </div>
-        <!-- / Layout page -->
       </div>
-      
-      <!-- Overlay -->
-      <div class="layout-overlay layout-menu-toggle"></div>
-      
-    </div>
-    <!-- / Layout wrapper -->
-    
-   
-    <!-- Core JS -->
 
-    <!-- Make sure jQuery is loaded before all plugins dependent on it -->
+      <div class="layout-overlay layout-menu-toggle"></div>
+    </div>
+
+    <!-- Core JS: masing-masing cukup dimuat SEKALI.
+         Memuat Bootstrap dua kali membuat dropdown/modal terbuka lalu langsung tertutup. -->
     <script src="{{ asset('assets/vendor/libs/jquery/jquery.js') }}"></script>
     <script src="{{ asset('assets/vendor/libs/popper/popper.js') }}"></script>
     <script src="{{ asset('assets/vendor/js/bootstrap.js') }}"></script>
     <script src="{{ asset('assets/vendor/libs/perfect-scrollbar/perfect-scrollbar.js') }}"></script>
     <script src="{{ asset('assets/vendor/js/menu.js') }}"></script>
-    <!-- endbuild -->
 
     <!-- Vendors JS -->
     <script src="{{ asset('assets/vendor/libs/apex-charts/apexcharts.js') }}"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apextree@2.3.1/apextree.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11.14.5/dist/sweetalert2.all.min.js"></script>
+
     <!-- Main JS -->
     <script src="{{ asset('assets/js/main.js') }}"></script>
-    <!-- Page JS -->
-    <script src="{{ asset('assets/js/dashboards-analytics.js') }}"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <!-- Place this tag before closing body tag for github widget button. -->
-    <script async defer src="https://buttons.github.io/buttons.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apextree"></script>
-    <script src="//cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    {{-- <script src="[https://cdn.jsdelivr.net/npm/apexcharts](https://cdn.jsdelivr.net/npm/apexcharts)"></script>
-       --}}
-       <!-- jQuery HARUS paling pertama -->
-<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-
-<!-- Bootstrap bundle (boleh versi 5.3+) -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-
-<!-- Select2 CSS -->
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-
-<!-- Select2 JS (harus SETELAH jQuery) -->
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     @livewireScripts
     @stack('scripts')
-    @stack('styles')
     @include('components.SweetAlert.swal')
   </body>
 </html>

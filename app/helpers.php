@@ -432,65 +432,30 @@ if (!function_exists('sendMessageWithWhatsApp')) {
      * @param string $messageBody Isi pesan teks yang akan dikirim.
      * @return bool True jika berhasil mengirim, false jika gagal.
      */
-    function sendMessageWithWhatsApp(string $targetPhoneNumber, string $messageBody): bool
+    function sendMessageWithWhatsApp(?string $targetPhoneNumber, string $messageBody): bool
     {
-
-        // 1. Coba dapatkan token yang valid dari database
-        $validSession = LoginwaSession::where('expires_at', '>', now())
-            ->first();
-
-        $token = $validSession ? $validSession->token : null;
-
-        // 2. Jika tidak ada token valid, coba login ulang untuk mendapatkan token baru
-        if (!$token) {
-            Log::info("Token tidak ditemukan atau kedaluwarsa. Mencoba login ulang ke WA service...");
-            // Asumsi kolom nomor WA di tabel users adalah 'whatsapp'
-
-            $newTokenData = getTokenWa(); // Panggil helper login yang sudah ada
-            if ($newTokenData && isset($newTokenData['token'])) {
-                $token = $newTokenData['token'];
-                Log::info("Token baru berhasil didapatkan untuk user ID: {$token}");
-            } else {
-                Log::error("SendMessageWA Gagal: Tidak bisa mendapatkan token baru ");
-                return false; // Gagal mendapatkan token baru, hentikan proses
-            }
+        // Pengiriman via WhatsApp gateway. Tidak pernah melempar exception:
+        // notifikasi WA gagal tidak boleh menggagalkan transaksi.
+        if (blank($targetPhoneNumber)) {
+            return false;
         }
-
-        // 3. Kirim pesan menggunakan token yang didapat
-        $sendMessageUrl = config('services.loginwa.url');
-        if (empty($sendMessageUrl)) {
-            Log::error('SendMessageWA Gagal: LOGINWA_SEND_MESSAGE_URL belum diatur.');
+        if (!\App\Support\WhatsAppGateway::configured()) {
+            Log::warning('WA tidak dikirim: WhatsApp gateway belum dikonfigurasi.');
             return false;
         }
 
         try {
-            $response = Http::withOptions(['verify' => config('services.loginwa.verify_ssl')])->withToken($token) // <-- Menambahkan header 'Authorization: Bearer <token>'
-                ->timeout(30) // Set timeout 30 detik
-                ->post($sendMessageUrl . '/external/send-message', [
-                    'phone_number' => $targetPhoneNumber,
-                    'type' => 'text',
-                    'body' => $messageBody,
-                ]);
-
-            if ($response->successful()) {
-                $responseData = $response->json();
-                // Anda mungkin perlu memeriksa status dari body respons juga, tergantung API-nya
-                // if (isset($responseData['status']) && $responseData['status'] === 1) {
-                Log::info("Pesan WA berhasil dikirim ke {$targetPhoneNumber} ");
-                Log::info($responseData['status']);
-                return true;
-                // }
+            if (!\App\Support\WhatsAppGateway::isConnected()) {
+                Log::warning("WA ke {$targetPhoneNumber} tidak dikirim: WhatsApp belum terhubung (scan QR di Integrasi > WhatsApp).");
+                return false;
             }
+            \App\Support\WhatsAppGateway::sendText($targetPhoneNumber, $messageBody);
+            Log::info("Pesan WA terkirim ke {$targetPhoneNumber}");
 
-            // Jika request tidak sukses
-            Log::error('SendMessageWA API request gagal.', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-            return false;
+            return true;
+        } catch (\Throwable $e) {
+            Log::error("Pesan WA ke {$targetPhoneNumber} gagal: " . $e->getMessage());
 
-        } catch (\Exception $e) {
-            Log::critical('Terjadi exception saat mengirim pesan WA: ' . $e->getMessage());
             return false;
         }
     }

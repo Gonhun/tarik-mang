@@ -47,8 +47,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/software', App\Livewire\Licenses\Software\Main::class)->name('software.main');
 
     Route::get('/admin/forigate', App\Livewire\Admin\Fortigate::class)->name('admin.fortigate')->middleware('can:Fortigate');
-    Route::get('/admin/forigate/port', App\Livewire\Admin\Fortigate\Port::class)->name('admin.fortigate.port')->middleware('can:Fortigate');
-    Route::get('/admin/forigate/api', App\Livewire\Admin\Fortigate\Api::class)->name('admin.fortigate.api')->middleware('can:Fortigate');
+    // Halaman lama: diarahkan ke tab di halaman detail perangkat.
+    $fortigateRedirect = fn (string $tab) => function (\Illuminate\Http\Request $request) use ($tab) {
+        $id = $request->integer('device') ?: \App\Models\FortigateDevice::orderBy('name')->value('id');
+
+        return $id ? redirect()->route('admin.fortigate.show', ['device' => $id, 'tab' => $tab]) : redirect()->route('admin.fortigate');
+    };
+    Route::get('/admin/forigate/port', $fortigateRedirect('interface'))->name('admin.fortigate.port')->middleware('can:Fortigate');
+    Route::get('/admin/forigate/api', $fortigateRedirect('api'))->name('admin.fortigate.api')->middleware('can:Fortigate');
+    Route::get('/admin/forigate/{device}', App\Livewire\Admin\Fortigate\Show::class)->whereNumber('device')->name('admin.fortigate.show')->middleware('can:Fortigate');
 
     Route::get('/admin/users', App\Livewire\Admin\ManageUsers::class)->name('admin.users')->middleware('can:Add User');
 

@@ -2,120 +2,258 @@
 
 namespace App\Livewire\Admin;
 
+use App\Support\WhatsAppGateway;
 use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Title;
 use Livewire\Component;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
-use PhpOffice\PhpSpreadsheet\Calculation\TextData\Replace;
+use Throwable;
 
+/**
+ * Integrasi WhatsApp via gateway: hubungkan nomor (scan QR / kode pairing),
+ * cek status, kirim pesan uji, dan kirim pesan ke grup.
+ */
+#[Title('WhatsApp')]
 class Whatsapp extends Component
 {
-    public $groups = [];
-    public $errorMessage = '';
+    /** QR WhatsApp berlaku ±40 detik; minta baru sebelum kedaluwarsa. */
+    private const QR_REFRESH_SECONDS = 30;
 
-    public $isSendMessageModalOpen = false;
-    public $targetGroupId = '';
-    public $targetGroupName = '';
-    public $messageBody = '';
-    /**
-     * Properti untuk mengontrol state loading.
-     * @var bool
-     */
-    public $isLoading = true;
+    #[Locked] public string $state = 'loading';
+    #[Locked] public array $profile = [];
+    #[Locked] public array $server = [];
+    #[Locked] public ?string $qr = null;
+    #[Locked] public ?string $pairingCode = null;
+    #[Locked] public int $qrAt = 0;
+    public string $pairPhone = '';
 
-    /**
-     * Method ini dijalankan saat komponen pertama kali dimuat.
-     * Tugasnya adalah memicu pengambilan data.
-     */
-    public function mount()
+    #[Locked] public array $groups = [];
+    #[Locked] public bool $groupsLoaded = false;
+    public string $groupSearch = '';
+
+    public string $testNumber = '';
+    public string $testMessage = 'Tes notifikasi dari AMS IT OPS.';
+
+    #[Locked] public string $targetGroupId = '';
+    #[Locked] public string $targetGroupName = '';
+    public string $messageBody = '';
+    public bool $isSendMessageModalOpen = false;
+
+    public string $errorMessage = '';
+
+    public function mount(): void
     {
-        // Data API dimuat setelah halaman tampil (wire:init) agar halaman tidak menunggu API.
+        $this->testNumber = (string) (Auth::user()->whatsapp ?? '');
     }
 
-    /**
-     * Method untuk mengambil data dari URL webhook.
-     */
-    public function fetchGroupData()
+    /** Dipanggil wire:init: status & profil. */
+    public function loadStatus(): void
     {
-        $this->isLoading = true;
         $this->errorMessage = '';
-        $webhookUrl = config('services.ainya.whatsapp_webhook_url');
+        WhatsAppGateway::forgetState();
+        $this->state = WhatsAppGateway::state();
 
-        try {
-            // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
-            $response = Http::timeout(60)->get($webhookUrl);
-
-            if ($response->successful()) {
-                $data = $response->json();
-                // Pastikan data yang diterima adalah array sebelum disimpan
-                if (is_array($data)) {
-                    $this->groups = $data;
-                } else {
-                    $this->errorMessage = 'Format data yang diterima dari API tidak valid.';
-                }
-            } else {
-                // Jika request tidak berhasil (misal, error 404 atau 500 dari server API)
-                $this->errorMessage = 'Gagal mengambil data dari server. Status: ' . $response->status();
-                Log::error('Gagal mengambil data dari webhook WA', [
-                    'status' => $response->status(), 
-                    'body' => $response->body()
-                ]);
+        if (in_array($this->state, ['open', 'close', 'connecting'], true)) {
+            try {
+                $this->server = WhatsAppGateway::server();
+                $this->profile = $this->state === 'open' ? $this->extractProfile(WhatsAppGateway::info()) : [];
+            } catch (Throwable $e) {
+                $this->errorMessage = $e->getMessage();
             }
-        } catch (\Exception $e) {
-            // Jika terjadi error koneksi atau timeout
-            $this->errorMessage = 'Terjadi kesalahan saat mencoba terhubung ke server API.';
-            Log::critical('Exception saat mengambil data dari webhook WA: ' . $e->getMessage());
+        }
+        if ($this->state === 'open') {
+            $this->qr = $this->pairingCode = null;
+        }
+    }
+
+    protected function extractProfile(?array $info): array
+    {
+        if (!$info) {
+            return [];
+        }
+        $jid = (string) ($info['ownerJid'] ?? '');
+
+        return [
+            'name' => $info['profileName'] ?? null,
+            'number' => $jid ? '+' . explode('@', $jid)[0] : ($info['number'] ?? null),
+            'picture' => $info['profilePicUrl'] ?? null,
+            'since' => $info['updatedAt'] ?? null,
+        ];
+    }
+
+    /** Mulai menghubungkan: buat instance bila belum ada, lalu tampilkan QR. */
+    public function startConnect(): void
+    {
+        $this->errorMessage = '';
+        try {
+            if ($this->state === 'missing') {
+                WhatsAppGateway::create();
+            }
+            $this->requestQr();
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
+    }
+
+    protected function requestQr(?string $phone = null): void
+    {
+        $result = WhatsAppGateway::connect($phone);
+        $this->qr = $result['base64'];
+        $this->pairingCode = $result['pairingCode'] ?? null;
+        $this->qrAt = time();
+        $this->state = 'connecting';
+        WhatsAppGateway::forgetState();
+
+        if (!$this->qr && !$this->pairingCode) {
+            // Tidak ada QR → kemungkinan sudah terhubung.
+            $this->loadStatus();
+        }
+    }
+
+    /** Alternatif tanpa kamera: kode pairing untuk dimasukkan di HP. */
+    public function pairWithPhone(): void
+    {
+        $this->validate(['pairPhone' => 'required|min:9|max:20'], ['pairPhone.required' => 'Isi nomor WhatsApp yang akan dihubungkan.']);
+        $this->errorMessage = '';
+        try {
+            if ($this->state === 'missing') {
+                WhatsAppGateway::create();
+            }
+            $this->requestQr(PhoneFormat($this->pairPhone));
+            if (!$this->pairingCode) {
+                $this->errorMessage = 'Server tidak mengirim kode pairing. Gunakan scan QR.';
+            }
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
+    }
+
+    /** wire:poll selama QR tampil: deteksi sudah terhubung & perbarui QR. */
+    public function pollConnection(): void
+    {
+        if ($this->state !== 'connecting') {
+            return;
+        }
+        WhatsAppGateway::forgetState();
+        $state = WhatsAppGateway::state();
+
+        if ($state === 'open') {
+            $this->loadStatus();
+            $this->dispatch('swal:success', ['title' => 'Terhubung', 'text' => 'WhatsApp berhasil terhubung. Notifikasi akan dikirim dari nomor ini.']);
+            return;
         }
 
-        $this->isLoading = false;
+        if (!$this->pairingCode && time() - $this->qrAt >= self::QR_REFRESH_SECONDS) {
+            try {
+                $this->requestQr();
+            } catch (Throwable $e) {
+                $this->errorMessage = $e->getMessage();
+            }
+        }
     }
-    public function openSendMessageModal($groupId, $groupName)
+
+    public function cancelConnect(): void
     {
-        $this->targetGroupId = $groupId ;//str_replace('@g.us', '', $groupId);
-        $this->targetGroupName = $groupName;
-        $this->messageBody = ''; // Kosongkan isi pesan setiap kali modal dibuka
+        $this->qr = $this->pairingCode = null;
+        $this->loadStatus();
+    }
+
+    public function logout(): void
+    {
+        try {
+            WhatsAppGateway::logout();
+            $this->profile = [];
+            $this->groups = [];
+            $this->groupsLoaded = false;
+            $this->loadStatus();
+            $this->dispatch('swal:success', ['title' => 'Terputus', 'text' => 'Nomor WhatsApp sudah dilepas. Scan QR lagi untuk menghubungkan nomor.']);
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
+    }
+
+    public function restart(): void
+    {
+        try {
+            WhatsAppGateway::restart();
+            $this->loadStatus();
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
+    }
+
+    public function sendTest(): void
+    {
+        $this->validate([
+            'testNumber' => 'required|min:9|max:30',
+            'testMessage' => 'required|max:1000',
+        ], [
+            'testNumber.required' => 'Isi nomor tujuan.',
+            'testMessage.required' => 'Isi pesan uji.',
+        ]);
+
+        try {
+            WhatsAppGateway::sendText($this->testNumber, $this->testMessage . "\n\n— dikirim oleh " . Auth::user()->name);
+            $this->dispatch('swal:success', ['title' => 'Terkirim', 'text' => 'Pesan uji terkirim ke ' . WhatsAppGateway::normalizeTarget($this->testNumber) . '.']);
+        } catch (Throwable $e) {
+            $this->addError('testNumber', $e->getMessage());
+        }
+    }
+
+    public function loadGroups(): void
+    {
+        $this->errorMessage = '';
+        try {
+            $this->groups = WhatsAppGateway::groups();
+            $this->groupsLoaded = true;
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
+    }
+
+    public function openSendMessageModal(string $groupId): void
+    {
+        $group = collect($this->groups)->firstWhere('id', $groupId);
+        if (!$group) {
+            return;
+        }
+        $this->targetGroupId = $group['id'];
+        $this->targetGroupName = $group['subject'];
+        $this->messageBody = '';
         $this->resetValidation();
         $this->isSendMessageModalOpen = true;
     }
 
-    /**
-     * Method BARU untuk menutup modal kirim pesan.
-     */
-    public function closeSendMessageModal()
+    public function closeSendMessageModal(): void
     {
         $this->isSendMessageModalOpen = false;
     }
 
-    /**
-     * Method BARU untuk mengirim pesan dari modal.
-     */
-    public function sendMessage()
+    public function sendMessage(): void
     {
-        $this->validate([
-            'messageBody' => 'required|string|min:1',
-        ], [
-            'messageBody.required' => 'Isi pesan tidak boleh kosong.'
-        ]);
-        $this->messageBody .= "\n\nDikirim oleh " . Auth::user()->name;
-       
-        // Panggil helper global untuk mengirim pesan
-        // Anda harus sudah memiliki helper ini dari diskusi kita sebelumnya.
-        $isSuccess = sendMessageWithWhatsApp($this->targetGroupId, $this->messageBody);
+        $this->validate(['messageBody' => 'required|string|max:4000'], ['messageBody.required' => 'Isi pesan tidak boleh kosong.']);
 
-        if ($isSuccess) {
-            $this->dispatch('swal:success', [
-                'title' => 'Berhasil!',
-                'text' => "Pesan berhasil dikirim ke grup '{$this->targetGroupName}'",
-            ]);
-        } else {
-            $this->dispatch('show-toast', ['type' => 'error', 'message' => "Gagal mengirim pesan ke grup '{$this->targetGroupName}'. Cek log untuk detail."]);
+        try {
+            WhatsAppGateway::sendText($this->targetGroupId, $this->messageBody . "\n\n— dikirim oleh " . Auth::user()->name);
+            $this->isSendMessageModalOpen = false;
+            $this->dispatch('swal:success', ['title' => 'Terkirim', 'text' => "Pesan terkirim ke grup {$this->targetGroupName}."]);
+        } catch (Throwable $e) {
+            $this->addError('messageBody', $e->getMessage());
         }
-        
-        $this->closeSendMessageModal();
     }
+
     public function render()
     {
-        
-        return view('livewire.admin.whatsapp');
+        $term = mb_strtolower(trim($this->groupSearch));
+        $groups = $term === ''
+            ? $this->groups
+            : array_values(array_filter($this->groups, fn ($g) => str_contains(mb_strtolower($g['subject']), $term) || str_contains($g['id'], $term)));
+
+        return view('livewire.admin.whatsapp', [
+            'filteredGroups' => $groups,
+            'stateLabel' => WhatsAppGateway::STATE_LABELS[$this->state] ?? ($this->state === 'loading' ? 'Memeriksa…' : $this->state),
+            'instanceName' => WhatsAppGateway::instance(),
+            'apiUrl' => config('services.whatsapp.url'),
+        ]);
     }
 }

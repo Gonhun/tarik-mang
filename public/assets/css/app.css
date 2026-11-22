@@ -1,0 +1,245 @@
+/*
+ * app.css — perapian global di atas tema Sneat.
+ * Hanya menyamakan tampilan komponen yang sudah ada; tidak mengganti warna tema.
+ */
+
+:root {
+  --app-radius: 0.5rem;
+  --app-muted: #8592a3;
+  --app-thead-bg: #f8f8fb;
+}
+
+/* ---------- Brand & sidebar ---------- */
+.layout-menu .app-brand {
+  height: 64px;
+  padding-inline: 1.5rem 1rem;
+}
+.app-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: 1.35rem;
+  flex-shrink: 0;
+}
+.app-brand-text {
+  font-size: 1.125rem;
+  color: var(--bs-heading-color);
+  letter-spacing: 0;
+}
+.app-brand-text small {
+  font-size: 0.7rem;
+  margin-top: 2px;
+}
+.layout-menu .menu-header {
+  margin-top: 0.75rem;
+}
+.layout-menu .menu-header .menu-header-text {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+}
+.layout-menu .menu-link .badge {
+  font-size: 0.7rem;
+}
+
+/* ---------- Navbar ---------- */
+.navbar-page-title {
+  min-width: 0;
+  font-size: 1rem;
+}
+.layout-navbar .avatar img {
+  object-fit: cover;
+}
+.min-w-0 {
+  min-width: 0;
+}
+
+/* ---------- Konten ---------- */
+.content-wrapper > div > .container-fluid,
+.content-wrapper > .container-fluid {
+  padding-inline: 1.5rem;
+}
+@media (max-width: 575.98px) {
+  .content-wrapper > div > .container-fluid,
+  .content-wrapper > .container-fluid,
+  .content-wrapper .container-xxl {
+    padding-inline: 1rem !important;
+  }
+  .content-wrapper .py-4 {
+    padding-top: 1rem !important;
+    padding-bottom: 1rem !important;
+  }
+}
+
+/* Header halaman: judul + aksi di kanan, turun ke bawah di layar kecil. */
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+.page-header h4,
+.page-header .page-title {
+  margin-bottom: 0;
+}
+.page-header .page-subtitle {
+  color: var(--app-muted);
+  font-size: 0.875rem;
+}
+
+/* ---------- Kartu ---------- */
+.card {
+  border-radius: var(--app-radius);
+}
+.card > .card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.card > .card-header > .card-title,
+.card > .card-header > h5 {
+  margin-bottom: 0;
+  margin-right: auto;
+}
+
+/* ---------- Tabel ---------- */
+.table > thead > tr > th {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--bs-heading-color);
+}
+.card .table > thead > tr > th {
+  background-color: var(--app-thead-bg);
+}
+.table > :not(caption) > * > * {
+  vertical-align: middle;
+}
+.table td .btn-group,
+.table td .dropdown {
+  white-space: nowrap;
+}
+/* Tabel di dalam kartu: geser horizontal di layar kecil, bukan memecah layout. */
+.card .table-responsive {
+  -webkit-overflow-scrolling: touch;
+}
+.card-body > .table-responsive:last-child,
+.card > .table-responsive:last-child {
+  margin-bottom: 0;
+}
+
+/* Paginasi */
+.pagination {
+  flex-wrap: wrap;
+  gap: 0.125rem;
+  margin-bottom: 0;
+}
+nav[role="navigation"] p.small {
+  margin-bottom: 0.5rem;
+}
+
+/* ---------- Badge & tombol ---------- */
+.badge {
+  font-weight: 500;
+}
+.btn {
+  white-space: nowrap;
+}
+.btn-icon.btn-sm {
+  width: 2rem;
+  height: 2rem;
+}
+:focus-visible {
+  outline: 2px solid var(--bs-primary);
+  outline-offset: 2px;
+}
+.btn:focus-visible,
+.form-control:focus-visible,
+.form-select:focus-visible {
+  outline: none;
+}
+
+/* ---------- Form ---------- */
+.form-label {
+  font-weight: 500;
+}
+.invalid-feedback {
+  font-size: 0.8125rem;
+}
+
+/* ---------- Modal ---------- */
+@media (max-width: 575.98px) {
+  .modal-dialog {
+    margin: 0.5rem;
+  }
+  .modal-footer {
+    flex-wrap: wrap;
+  }
+  .modal-footer > .btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* ---------- Select2 mengikuti gaya form Bootstrap ---------- */
+.select2-container {
+  width: 100% !important;
+}
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple {
+  min-height: calc(1.5em + 1.086rem + 2px);
+  border: var(--bs-border-width) solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  background-color: var(--bs-paper-bg, #fff);
+}
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+  line-height: calc(1.5em + 1.086rem);
+  padding-left: 0.9375rem;
+  color: var(--bs-body-color);
+}
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+  height: 100%;
+  right: 0.5rem;
+}
+.select2-container--default.select2-container--focus .select2-selection--multiple,
+.select2-container--default.select2-container--open .select2-selection--single {
+  border-color: var(--bs-primary);
+}
+.select2-dropdown {
+  border-color: var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  z-index: 1095;
+}
+.select2-container--default .select2-results__option--highlighted[aria-selected],
+.select2-container--default .select2-results__option--highlighted.select2-results__option--selectable {
+  background-color: var(--bs-primary);
+}
+
+/* ---------- Kosong / memuat ---------- */
+.empty-state {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--app-muted);
+}
+.empty-state > i {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
+  opacity: 0.6;
+}
+[wire\:loading] {
+  transition: opacity 0.15s;
+}
+
+/* ---------- Footer ---------- */
+.content-footer .footer-container {
+  border-top: 1px solid var(--bs-border-color);
+}

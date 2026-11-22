@@ -23,6 +23,14 @@ return [
         'secret' => env('AWS_SECRET_ACCESS_KEY'),
         'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
     ],
+    // WhatsApp gateway (scan QR di Integrasi > WhatsApp). Dipakai oleh sendMessageWithWhatsApp().
+    'whatsapp' => [
+        'url' => rtrim((string) env('WHATSAPP_API_URL', ''), '/'),
+        'key' => env('WHATSAPP_API_KEY'),
+        'instance' => env('WHATSAPP_INSTANCE', 'ams'),
+        'verify_ssl' => (bool) env('WHATSAPP_VERIFY_SSL', true),
+    ],
+
     'loginwa' => [
         'url' => env('LOGINWA_API_URL'),
         'number' => env('LOGINWA_NUMBER'),

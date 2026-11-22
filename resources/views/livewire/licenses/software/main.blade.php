@@ -185,7 +185,7 @@
         </div>
     </div>
 
-    @push('script')
+    @push('scripts')
         <script>
             document.addEventListener('livewire:init', () => {
                 const modalId = '#softwareModal'; // Sesuaikan dengan ID modal Anda

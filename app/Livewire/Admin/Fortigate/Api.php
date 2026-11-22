@@ -2,97 +2,112 @@
 
 namespace App\Livewire\Admin\Fortigate;
 
+use App\Livewire\Admin\Fortigate\Concerns\SelectsDevice;
+use App\Support\FortigateClient;
+use Livewire\Attributes\Locked;
+use Livewire\Attributes\Title;
 use Livewire\Component;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
+use Throwable;
 
-
+/**
+ * Penjelajah REST API Fortigate (hanya baca / GET) untuk perangkat terpilih.
+ */
+#[Title('API Fortigate')]
 class Api extends Component
 {
-    public $isLoading = true;
-    public $messageBody = '';
-    public $errorMessage = '';
-    public $groups = [];
-    public $step = 0;
-    public function mount()
+    use SelectsDevice;
+
+    public const CATEGORIES = ['monitor' => 'Monitoring', 'log' => 'Log'];
+
+    #[Locked] public string $category = '';
+    #[Locked] public array $endpoints = [];
+    public string $search = '';
+    public bool $onlySupported = true;
+    public string $errorMessage = '';
+
+    #[Locked] public ?string $resultPath = null;
+    #[Locked] public ?string $resultJson = null;
+
+    public function updatedDeviceId(): void
     {
-        $this->step=0;
+        $this->reset(['category', 'endpoints', 'resultPath', 'resultJson', 'errorMessage']);
     }
-    function formatBytes($bytes, $precision = 2)
+
+    public function fetchGroupData(string $category): void
     {
-        $units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-        
-        $bytes = max($bytes, 0);
-        $pow = $bytes > 0 ? floor(log($bytes) / log(1024)) : 0;
-        $pow = min($pow, count($units) - 1);
-    
-        $bytes /= pow(1024, $pow);
-    
-        return round($bytes, $precision) . ' ' . $units[$pow];
-    }
-    public function fetchGroupData($value)
-    {
-        $this->isLoading = true;
-        $this->errorMessage = '';
-        // $value berasal dari browser: batasi ke karakter path API yang wajar.
-        $value = (string) $value;
-        if (!preg_match('#^[A-Za-z0-9_\-/]+$#', $value) || str_contains($value, '..')) {
-            $this->errorMessage = 'Path API tidak valid.';
-            $this->isLoading = false;
+        if (!array_key_exists($category, self::CATEGORIES)) {
             return;
         }
-        $token = config('services.fortigate.token');
-        $webhookUrl = rtrim(config('services.fortigate.url'), '/') . '/' . ltrim($value, '/');
-        $this->groups = [];
-        try {
-
-            // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $token,
-            ])->withOptions(['verify' => config('services.fortigate.verify_ssl')])->timeout(60)->get($webhookUrl);
-
-            if ($response->successful()) {
-                $data = $response->json();
-               
-                if (isset($data['directory']) && is_array($data['directory'])) {
-                    
-                    foreach ($data['directory'] as $key => $port) {
-                        if (isset($port['path']) && isset($port['name'])&& isset($port['action']) && isset($port['supported']) ) {
-                            $this->groups[] = [
-                                'path' => $port['path'],
-                                'name' => $port['name'],
-                                'action' => $port['action'],
-                                'supported' => boolval($port['supported']),
-                                'summary' => $port['summary'],
-                                'request' => $port['request']
-                            ];
-                           
-                        }
-                    }
-                }
-               
-            // dd($this->groups);
-                    // Tampilkan hasil
-                    
-            $this->step=1;
-            } else {
-                // Jika request tidak berhasil (misal, error 404 atau 500 dari server API)
-                $this->errorMessage = 'Gagal mengambil data dari server. Status: ' . $response->status();
-                Log::error('Gagal mengambil data dari webhook WA', [
-                    'status' => $response->status(), 
-                    'body' => $response->body()
-                ]);
-            }
-        } catch (\Exception $e) {
-            // Jika terjadi error koneksi atau timeout
-            $this->errorMessage = 'Terjadi kesalahan saat mencoba terhubung ke server API.';
-            Log::critical('Exception saat mengambil data dari webhook WA: ' . $e->getMessage());
+        $this->errorMessage = '';
+        $this->category = $category;
+        $this->endpoints = [];
+        $device = $this->device();
+        if (!$device) {
+            return;
         }
 
-        $this->isLoading = false;
+        try {
+            $data = FortigateClient::for($device)->get($category, [], 60);
+            foreach ($data['directory'] ?? [] as $e) {
+                if (!isset($e['path'], $e['name'])) continue;
+                $this->endpoints[] = [
+                    'path' => $e['path'],
+                    'name' => $e['name'],
+                    'action' => $e['action'] ?? '',
+                    'supported' => (bool) ($e['supported'] ?? false),
+                    'summary' => $e['summary'] ?? '',
+                    'params' => collect($e['request']['parameters'] ?? [])->map(fn ($p) => [
+                        'name' => $p['name'] ?? '', 'type' => $p['type'] ?? '', 'summary' => $p['summary'] ?? '',
+                    ])->all(),
+                ];
+            }
+        } catch (Throwable $e) {
+            $this->errorMessage = $e->getMessage();
+        }
     }
+
+    public function back(): void
+    {
+        $this->reset(['category', 'endpoints', 'search', 'resultPath', 'resultJson', 'errorMessage']);
+    }
+
+    /** Jalankan GET ke endpoint "select" (hanya baca). */
+    public function run(int $index): void
+    {
+        $e = $this->endpoints[$index] ?? null;
+        $device = $this->device();
+        if (!$e || !$device || $e['action'] !== 'select') {
+            return;
+        }
+        $path = "{$this->category}/{$e['path']}/{$e['name']}";
+        $this->resultPath = $path;
+        try {
+            $json = json_encode(FortigateClient::for($device)->get($path, [], 30), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $this->resultJson = mb_strlen($json) > 200000 ? mb_substr($json, 0, 200000) . "\n… (dipotong)" : $json;
+        } catch (Throwable $ex) {
+            $this->resultJson = 'Gagal: ' . $ex->getMessage();
+        }
+    }
+
+    public function closeResult(): void
+    {
+        $this->reset(['resultPath', 'resultJson']);
+    }
+
     public function render()
     {
-        return view('livewire.admin.fortigate.api');
+        $term = mb_strtolower(trim($this->search));
+        $rows = collect($this->endpoints)
+            ->map(fn ($e, $i) => $e + ['index' => $i])
+            ->filter(fn ($e) => (!$this->onlySupported || $e['supported'])
+                && ($term === '' || str_contains(mb_strtolower("{$e['path']}/{$e['name']} {$e['summary']}"), $term)))
+            ->values();
+
+        return view('livewire.admin.fortigate.api', [
+            'rows' => $rows,
+            'device' => $this->device(),
+            'devices' => $this->deviceOptions(),
+            'categories' => self::CATEGORIES,
+        ]);
     }
 }

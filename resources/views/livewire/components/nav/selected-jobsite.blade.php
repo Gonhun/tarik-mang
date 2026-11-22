@@ -1,5 +1,5 @@
 <div>
-    <select id="jobsites" class="form-select" wire:change="ChangeJobsites($event.target.value)" aria-label="Default select example">
+    <select id="jobsites" class="form-select form-select-sm" style="min-width:5.5rem" wire:change="ChangeJobsites($event.target.value)" aria-label="Default select example">
        @foreach ($jobsites as $jobsite )
         <option value="{{ $jobsite->id }}" {{  $jobsite->id == Auth::user()->jobsite_id ? 'selected' : '' }}>{{$jobsite->code}}</option>
         {{-- <option selected>Open this select menu</option> --}}

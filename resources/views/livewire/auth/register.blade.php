@@ -152,7 +152,7 @@
     </div>
   </div>
 
-  @push('script')
+  @push('scripts')
   <style>
     .animated-background {
       position: absolute;

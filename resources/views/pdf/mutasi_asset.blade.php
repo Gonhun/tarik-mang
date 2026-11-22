@@ -1,294 +1,98 @@
+@php
+    $t = $bast;
+    $date = $t->transaction_date ?? $t->created_at;
+    $closed = in_array($t->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true);
+
+    $signers = [[
+        'role' => 'Diajukan oleh',
+        'name' => $t->creator->name ?? null,
+        'state' => 'approved',
+        'date' => \App\Support\BaFormat::date($t->created_at, 'D MMM YYYY'),
+    ]];
+    foreach ($t->approvals->sortBy('step_order') as $ap) {
+        $state = match ($ap->status) {
+            'Approved' => 'approved',
+            'Rejected' => 'rejected',
+            default => $closed ? 'none' : 'pending',
+        };
+        $signers[] = [
+            'role' => $ap->approver_role_name ?: 'Tahap ' . $ap->step_order,
+            'name' => $ap->actionBy->name ?? $ap->approver->name ?? null,
+            'state' => $state,
+            'date' => match ($state) {
+                'approved' => ($ap->notes === \App\Support\Workflow::AUTO_NOTE ? 'Otomatis · ' : '') . \App\Support\BaFormat::date($ap->action_at, 'D MMM YYYY'),
+                'rejected' => 'Ditolak ' . \App\Support\BaFormat::date($ap->action_at, 'D MMM YYYY'),
+                'none' => ' ',
+                default => 'Menunggu persetujuan',
+            },
+        ];
+    }
+@endphp
 <!DOCTYPE html>
 <html lang="id">
 <head>
     <meta charset="UTF-8">
-    <title>Mutasi Aset - {{ $bast->transaction_number }}</title>
-    <style>
-        body {
-            font-family: 'Helvetica', Arial, sans-serif;
-            font-size: 9pt;
-            line-height: 1.5;
-            color: #333;
-            margin: 0;
-        }
-        @page { size: A4; margin: 12mm 12mm 15mm 12mm; }
-
-        .container { width: 100%; }
-
-        /* Header */
-        .header-table {
-            width: 100%;
-            border-bottom: 1px solid #333;
-            margin-bottom: 12px;
-            padding-bottom: 6px;
-        }
-        .header-table td { vertical-align: middle; border: none; }
-        .logo { width: 70px; height: auto; display: block; }
-        .company-details { text-align: right; }
-        .company-details .company-name {
-            font-size: 12pt; font-weight: bold; color: #2c3e50; margin-bottom: 2px;
-        }
-        .company-details p { margin: 0; font-size: 7.5pt; color: #555; }
-
-        /* Title */
-        .document-title { text-align: center; margin-bottom: 12px; }
-        .document-title h2 {
-            font-size: 12pt; margin: 0 0 4px 0;
-            text-transform: uppercase; letter-spacing: 1px;
-        }
-        .document-title p { margin: 0; font-size: 9pt; color: #555; }
-
-        /* Info */
-        .bast-info-table { width: 100%; margin-bottom: 8px; font-size: 9pt; }
-        .bast-info-table td { padding: 2px 0; }
-        .bast-info-table td.label { width: 130px; font-weight: bold; }
-
-        /* Parties */
-        .parties-section {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 10px 0;
-        }
-        .parties-section th, .parties-section td {
-            border: 1px solid #ddd;
-            padding: 5px 6px;
-            font-size: 9pt;
-        }
-        .parties-section th {
-            background-color: #f2f2f2;
-            font-weight: bold;
-            text-align: center;
-        }
-
-        /* Assets table */
-        .assets-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin: 12px 0;
-            font-size: 8.5pt;
-        }
-        .assets-table th, .assets-table td {
-            border: 1px solid #bbb;
-            padding: 4px 5px;
-            text-align: left;
-        }
-        .assets-table th {
-            background-color: #e9e9e9;
-            text-align: center;
-        }
-
-        /* Notes & closing */
-        .notes-section, .closing-statement {
-            margin-bottom: 12px;
-            font-size: 9pt;
-            text-align: justify;
-        }
-        .notes-section strong, .closing-statement strong {
-            display: block; margin-bottom: 3px;
-        }
-
-        /* Signatures */
-        .signature-section {
-            margin-top: 20px;
-            width: 100%;
-        }
-        .signature-section td {
-            width: 50%;
-            text-align: center;
-            font-size: 9pt;
-            vertical-align: top;
-        }
-        .signature-space {
-            height: 45px;
-            margin: 8px auto;
-            border-bottom: 1px solid #ccc;
-            width: 70%;
-            position: relative;
-        }
-        .signer-name { font-weight: bold; margin-top: 6px; display: inline-block; }
-
-        .stamp {
-            position: absolute;
-            left: 50%;
-            top: -10px;
-            transform: translateX(-50%) rotate(-15deg);
-            opacity: 0.75;
-        }
-        .stamp img { width: 60px; }
-
-        /* Footer */
-        .footer {
-            text-align: center;
-            font-size: 7pt;
-            color: #888;
-            position: fixed;
-            bottom: -25px;
-            left: 0; right: 0;
-            height: 30px;
-        }
-    </style>
+    <title>Mutasi {{ $t->transaction_number }}</title>
+    @include('pdf.partials.ba-style')
 </head>
 <body>
-<div class="container">
-    <!-- HEADER -->
-    <table class="header-table">
+@include('pdf.partials.ba-footer', ['docLabel' => 'BA Mutasi', 'docNumber' => $t->transaction_number])
+
+@include('pdf.partials.ba-header', [
+    'docTitle' => 'Berita Acara Mutasi Aset',
+    'docNumber' => $t->transaction_number,
+    'meta' => [
+        'Tanggal' => e(\App\Support\BaFormat::date($date)),
+        'Rute' => e(($t->fromJobsite->code ?? '-') . ' ke ' . ($t->toJobsite->code ?? '-')),
+        'Jumlah aset' => $t->items->count() . ' unit',
+        'Status' => \App\Support\BaFormat::status($t->status),
+    ],
+])
+
+<div class="section">
+    <p class="lead">{!! \App\Support\BaFormat::opening($date, $t->fromJobsite->name ?? null) !!} telah diajukan mutasi aset antar jobsite sebagai berikut:</p>
+    <table class="parties">
         <tr>
-            <td style="width: 90px;">
-                @php
-                    $logoPath = public_path('assets/img/LogoBSS.png');
-                    $approve = public_path('assets/img/approved-stamp.png');
-                    $pending = public_path('assets/img/pending-stamp.png');
-                @endphp
-                @if(file_exists($logoPath))
-                    <img src="{{ $logoPath }}" alt="Logo" class="logo">
-                @else
-                    <div style="width:70px; height:50px; border:1px solid #ccc;
-                                text-align:center; line-height:50px; font-size:8pt; color:grey;">
-                        Logo
-                    </div>
-                @endif
+            <td class="party">
+                @include('pdf.partials.ba-party', ['title' => 'Jobsite asal', 'rows' => [
+                    'Jobsite' => trim(($t->fromJobsite->code ?? '') . ' — ' . ($t->fromJobsite->name ?? ''), ' —'),
+                    'Cost center' => $fromCostCenter->cost_center_number ?? null,
+                ]])
             </td>
-            <td class="company-details">
-                <div class="company-name">PT. Bina Sarana Sukses</div>
-                <p>Landmark Pluit D17, Jl. Pluit Selatan Raya No.2, Jakarta Utara 14450</p>
-                <p>Telp: (021) 22677447 | Email: itops@binasaranasukses.com</p>
-                <p>Website: https://binasaranasukses.co.id/</p>
+            <td class="gap"></td>
+            <td class="party">
+                @include('pdf.partials.ba-party', ['title' => 'Jobsite tujuan', 'rows' => [
+                    'Jobsite' => trim(($t->toJobsite->code ?? '') . ' — ' . ($t->toJobsite->name ?? ''), ' —'),
+                    'Cost center' => $destinationCostCenter->cost_center_number ?? null,
+                ]])
             </td>
-        </tr>
-    </table>
-
-    <!-- TITLE -->
-    <div class="document-title">
-        <h2>Berita Acara Mutasi Aset</h2>
-        <p>Nomor: {{ $bast->transaction_number }}</p>
-    </div>
-
-    <!-- INFO -->
-    <table class="bast-info-table">
-        <tr>
-            <td class="label">Tanggal Mutasi</td>
-            <td>: {{ \Carbon\Carbon::parse($bast->created_at)->locale('id')->isoFormat('dddd, D MMMM YYYY') }}</td>
-        </tr>
-    </table>
-
-    <!-- OPENING PARAGRAPH -->
-    <p>
-        Pada hari ini, {{ \Carbon\Carbon::parse($bast->created_at)->locale('id')->isoFormat('dddd') }},
-        tanggal {{ \Carbon\Carbon::parse($bast->created_at)->locale('id')->translatedFormat('j') }}
-        bulan {{ \Carbon\Carbon::parse($bast->created_at)->locale('id')->translatedFormat('F') }}
-        tahun {{ \Carbon\Carbon::parse($bast->created_at)->locale('id')->translatedFormat('Y') }},
-        bertempat di {{ $bast->fromJobsite->name ?? 'Lokasi Tidak Disebutkan' }},
-        telah dilakukan Ajukan Mutasi aset dari:
-    </p>
-
-    <!-- PARTIES -->
-    <table class="parties-section">
-        <tr>
-            <th>Jobsite Asal</th>
-            <th>Jobsite Penerima</th>
-        </tr>
-        <tr>
-           
-            <td>
-                <p><b>Jobsite     :</b> {{ $bast->fromJobsite->name ?? 'N/A' }}</p>
-                <p><b>Cost Center :</b> {{ $fromCostCenter->cost_center_number ?? 'N/A' }}</p>
-            </td>
-            <td>
-                <p><b>Jobsite     :</b> {{ $bast->toJobsite->name ?? 'N/A' }}</p>
-                <p><b>Cost Center :</b> {{ $destinationCostCenter->cost_center_number ?? 'N/A' }}</p>
-            </td>
-        </tr>
-    </table>
-
-    <p>Mutasi aset dengan rincian sebagai berikut:</p>
-
-    <!-- ASSETS TABLE -->
-    <table class="assets-table">
-        <thead>
-        <tr>
-            <th style="width:5%;">No.</th>
-            <th style="width:18%;">Nomor Aset</th>
-            <th>Deskripsi</th>
-            <th style="width:18%;">Serial Number</th>
-            <th style="width:18%;">Kondisi</th>
-        </tr>
-        </thead>
-        <tbody>
-        @forelse ($bast->items as $index => $item)
-            <tr>
-                <td align="center">{{ $index + 1 }}</td>
-                <td>{{ $item->asset->asset_number ?? 'N/A' }}</td>
-                <td>
-                    <b>{{ $item->asset->assetType->name ?? 'Tipe N/A' }}</b> -
-                    {{ $item->asset->assetBrand->name ?? 'Merek N/A' }}<br>
-                    Seri/Model: {{ $item->asset->assetSeries->name ?? 'N/A' }}
-                </td>
-                <td>{{ $item->asset->serial_number ?? 'N/A' }}</td>
-                <td>
-                    {{ $item->asset_condition_at_handover ?? '' }}
-                    @if($item->condition_notes)
-                        <br><small><em>Catatan: {{ $item->condition_notes }}</em></small>
-                    @endif
-                </td>
-            </tr>
-        @empty
-            <tr>
-                <td colspan="5" align="center">Tidak ada aset tercantum.</td>
-            </tr>
-        @endforelse
-        </tbody>
-    </table>
-    <div class="notes-section">
-        <strong>Status: <u>{{ ucwords(strtolower($bast->status)) }}</u></strong>
-    </div>
-    <!-- NOTES -->
-
-    <!-- CLOSING -->
-    <div class="closing-statement">
-        <p>Jobsite pengirim akan di lepaskan beban Cost Center asset tersebut dan Asset tersebut akan di bebankan Cost Centernya pada jobsite penerima</p>
-    </div>
-
-    <!-- SIGNATURES -->
-    <table class="signature-section">
-        <tr>
-            <td>
-                Yang Mengajukan
-                <div class="signature-space">
-                    <div class="stamp"><img src="{{ $approve }}" alt="Approved"></div>
-                </div>
-                <span class="signer-name">{{ $bast->creator->name ?? '(_____________________)' }}</span>
-            </td>
-            @foreach ($bast->approvals as $index => $item )
-                <td>
-                    {{ $item->approver_role_name }}
-                    <div class="signature-space">
-                        @if($item->status === 'Pending')
-                            <div class="stamp"><img src="{{ $pending }}" alt="Pending"></div>
-                        @else
-                            <div class="stamp"><img src="{{ $approve }}" alt="Approved"></div>
-                        @endif
-                    </div>
-                    <span class="signer-name">{{ $item->approver->name ?? '(_____________________)' }}</span>
-                </td>
-            @endforeach
         </tr>
     </table>
 </div>
 
-<!-- FOOTER -->
-<div class="footer">
-    <script type="text/php">
-        if (isset($pdf)) {
-            $text_page_number = "Halaman {PAGE_NUM} dari {PAGE_COUNT}";
-            $font = null; $size = 7; $color = [0.5,0.5,0.5];
-            $y_position = $pdf->get_height() - 20;
-            $pdf->page_text(270, $y_position, $text_page_number, $font, $size, $color);
+<div class="section">
+    <div class="section-title">Rincian aset</div>
+    @include('pdf.partials.ba-assets', ['items' => $t->items])
+</div>
 
-            $nowFormattedPHP = \Carbon\Carbon::now()->isoFormat('D MMM YYYY HH:mm');
-            $custom_text = "Dokumen BAST Aset - Dicetak pada: " . $nowFormattedPHP;
-            $pdf->page_text(30, $y_position, $custom_text, $font, $size, $color);
-        }
-    </script>
+@if ($t->notes)
+    <div class="section">
+        <div class="section-title">Alasan / catatan</div>
+        <div class="note">{!! nl2br(e($t->notes)) !!}</div>
+    </div>
+@endif
+
+<div class="section statement">
+    <div class="section-title">Pernyataan</div>
+    <ol>
+        <li>Beban cost center atas aset di atas dilepaskan dari jobsite asal dan dibebankan kepada jobsite tujuan sejak mutasi disetujui.</li>
+        <li>Tanggung jawab fisik aset berpindah kepada jobsite tujuan setelah aset diterima.</li>
+    </ol>
+</div>
+
+<div class="section">
+    <div class="section-title">Pengesahan</div>
+    @include('pdf.partials.ba-signatures', ['signers' => $signers])
 </div>
 </body>
 </html>
