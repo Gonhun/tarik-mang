@@ -1,0 +1,87 @@
+<div class="container-xxl">
+    <div class="authentication-wrapper authentication-basic container-p-y">
+      <div class="authentication-inner">
+        <!-- Register -->
+        <div class="card px-sm-6 px-0">
+          <div class="card-body">
+            <!-- Logo -->
+            <div class="app-brand justify-content-center">
+              <a href="index.html" class="app-brand-link gap-2">
+                <span class="app-brand-text demo text-heading fw-bold">IT OPS</span>
+              </a>
+            </div>
+            <!-- /Logo -->
+            <h4 class="mb-1">Welcome to AMS! 👋</h4>
+            <p class="mb-6">Please sign-in to your account and start the adventure</p>
+            
+            </div>
+            <form id="formAuthentication" class="mb-6" wire:submit.prevent="authenticate">
+                @csrf
+              <div class="mb-6">
+                <label for="nik" class="form-label">NIK</label>
+                <input
+                  wire:model="nik" type="text"
+                  class="form-control @error('nik') is-invalid @enderror"
+                  id="nik"
+                  name="nik"
+                  placeholder="Enter your Nik"
+                  
+                  autofocus />
+                  @error('nik')
+                      <div class="invalid-feedback"> {{-- Class Bootstrap untuk pesan error --}}
+                          {{ $message }} {{-- Variabel $message otomatis berisi pesan error --}}
+                      </div>
+                  @enderror
+              </div>
+              
+              <div class="mb-6 form-password-toggle">
+                <label class="form-label" for="password">Password</label>
+                <div class="input-group input-group-merge">
+                  <input
+                    wire:model="password"
+                    type="password"
+                    id="password"
+                    class="form-control @error('password') is-invalid @enderror"
+                    name="password"
+                    placeholder="&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;&#xb7;"
+                    
+                    aria-describedby="password" />
+                  <span class="input-group-text cursor-pointer"><i class="icon-base bx bx-hide"></i></span>
+                  @error('password')
+                      <div class="invalid-feedback"> {{-- Class Bootstrap untuk pesan error --}}
+                          {{ $message }} {{-- Variabel $message otomatis berisi pesan error --}}
+                      </div>
+                  @enderror
+                  
+                </div>
+              </div>
+              <div class="mb-8">
+                <div class="d-flex justify-content-between">
+                  <div class="form-check mb-0">
+                    <input class="form-check-input" wire:model="remember" type="checkbox" id="remember-me" />
+                    <label class="form-check-label" for="remember-me"> Remember Me </label>
+                  </div>
+                  <a href="auth-forgot-password-basic.html">
+                    <span>Forgot Password?</span>
+                  </a>
+                </div>
+              </div>
+              <div class="mb-6">
+                <button type="submit" class="btn btn-primary d-grid w-100" type="submit">Login</button>
+              </div>
+            </form>
+
+            <p class="text-center">
+              <span>New on our platform?</span>
+              <a href="{{ route('register') }}">
+                <span>Create an account</span>
+              </a>
+            </p>
+          </div>
+        </div>
+        <!-- /Register -->
+      </div>
+    </div>
+    
+  </div>
+  
