@@ -33,14 +33,14 @@ class Port extends Component
     {
         $this->isLoading = true;
         $this->errorMessage = '';
-        $token = 'w4wxhNfnj3zfxdp4Gx0gx8pb8xcwfn';
-        $webhookUrl = 'https://192.168.4.1:8443/api/v2/monitor/system/interface';
+        $token = config('services.fortigate.token');
+        $webhookUrl = rtrim(config('services.fortigate.url'), '/') . '/monitor/system/interface';
 
         try {
             // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $token,
-            ])->withoutVerifying()->timeout(60)->get($webhookUrl);
+            ])->withOptions(['verify' => config('services.fortigate.verify_ssl')])->timeout(60)->get($webhookUrl);
 
             if ($response->successful()) {
                 $data = $response->json();

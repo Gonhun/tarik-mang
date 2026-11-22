@@ -4,6 +4,9 @@ namespace App\Livewire\Auth;
 
 use App\Models\Department;
 use App\Models\Jobsite;
+use App\Models\KaryawanErp;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\RateLimiter;
 use App\Models\Position;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
@@ -44,7 +47,7 @@ class Register extends Component
             'whatsapp_number' => 'required|string|max:20|unique:users,whatsapp', // Sesuaikan validasi (misal: numeric, starts_with)
             'jobsite_id' => 'required|exists:jobsites,id', // Ganti nullable menjadi 'required' jika wajib
             'department_id' => 'required|exists:departments,id', // Ganti nullable menjadi 'required' jika wajib
-            'password' => 'required|string|min:8',
+            'password' => 'required|string|min:8|max:255',
         ];
     }
 
@@ -65,10 +68,50 @@ class Register extends Component
         $this->validateOnly($propertyName);
     }
 
+    /**
+     * NIK harus ada di data HRD dan nomor WhatsApp harus sama dengan nomor telepon di HRD.
+     * Tanpa ini, siapa pun bisa mendaftar memakai NIK karyawan lain.
+     */
+    protected function verifyAgainstHrd(string $nik, string $whatsapp): bool
+    {
+        try {
+            $karyawan = KaryawanErp::where('NIK', $nik)->first(['NIK', 'Telp']);
+        } catch (\Throwable $e) {
+            Log::error('Register: gagal cek data HRD: ' . $e->getMessage());
+            $this->addError('nik', 'Data karyawan tidak dapat diverifikasi saat ini. Coba lagi nanti.');
+            return false;
+        }
+
+        if (!$karyawan) {
+            $this->addError('nik', 'NIK tidak terdaftar di data karyawan.');
+            return false;
+        }
+
+        $hrdPhone = PhoneFormat($karyawan->Telp ?? '');
+        if ($hrdPhone === '' || $hrdPhone !== PhoneFormat($whatsapp)) {
+            $this->addError('whatsapp_number', 'No WhatsApp tidak sesuai dengan data HRD. Hubungi tim IT/HRD.');
+            return false;
+        }
+
+        return true;
+    }
+
     public function registerUser()
-    {   
+    {
         $defaultRoleName = 'Karyawan';
         $validatedData = $this->validate();
+
+        $throttleKey = 'register|' . request()->ip();
+        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+            $this->addError('nik', 'Terlalu banyak percobaan. Coba lagi dalam ' . RateLimiter::availableIn($throttleKey) . ' detik.');
+            return;
+        }
+        RateLimiter::hit($throttleKey, 300);
+
+        if (!$this->verifyAgainstHrd($validatedData['nik'], $validatedData['whatsapp_number'])) {
+            return;
+        }
+
         $staffPosition = Position::where('department_id', $validatedData['department_id'])
                          ->where('name', 'like', 'Staff%')
                          ->first();
@@ -84,6 +127,7 @@ class Register extends Component
         ]);
         $user->assignRole($defaultRoleName);
         Auth::login($user,true);
+        request()->session()->regenerate();
         return redirect()->route('dashboard'); // atau rute lain setelah registrasi berhasil
     }
 

@@ -2,9 +2,10 @@
 
 namespace App\Livewire\Auth;
 
-use App\Models\LoginwaSession;
 use App\Models\User;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Carbon\Carbon;
@@ -38,6 +39,24 @@ class Login extends Component
             return redirect()->route('dashboard');
         }
     }
+    /**
+     * Batasi percobaan per NIK + IP. Mengembalikan true jika request harus ditolak.
+     */
+    protected function tooManyAttempts(string $action, int $maxAttempts = 5): bool
+    {
+        $key = $action . '|' . Str::lower($this->nik) . '|' . request()->ip();
+        if (RateLimiter::tooManyAttempts($key, $maxAttempts)) {
+            $seconds = RateLimiter::availableIn($key);
+            $this->dispatch('swal:error', [
+                'title' => 'Error!',
+                'text' => "Terlalu banyak percobaan. Coba lagi dalam {$seconds} detik.",
+            ]);
+            return true;
+        }
+        RateLimiter::hit($key, 60);
+        return false;
+    }
+
     public function togglePassword()
     {
         $this->showPassword = !$this->showPassword;
@@ -50,32 +69,23 @@ class Login extends Component
     {
         
         $this->validate();
-        
+
+        if ($this->tooManyAttempts('login')) {
+            return;
+        }
+
         // Menggunakan NIK untuk autentikasi
         if (Auth::attempt(['nik' => $this->nik, 'password' => $this->password], $this->remember)) {
+            RateLimiter::clear('login|' . Str::lower($this->nik) . '|' . request()->ip());
             request()->session()->regenerate();
-           
+
             return redirect()->intended(route('dashboard'));
         }
-        
-       
-       
-        $userExists = User::where('nik', $this->nik)->exists();
-        if (!$userExists) {
-            $this->dispatch('swal:error', [
-                'title' => 'Error!',
-                'text' => 'Username atau Password salah!',
-            ]);
-            // $this->addError('nik', 'NIK tidak terdaftar.');
-        } else {
-            $this->dispatch('swal:error', [
-                'title' => 'Error!',
-                'text' => 'Username atau Password salah!',
-            ]);
-            // $this->addError('password', 'Password yang Anda masukkan salah.'); 
-        }
-       
-       
+
+        $this->dispatch('swal:error', [
+            'title' => 'Error!',
+            'text' => 'Username atau Password salah!',
+        ]);
     }
     public function cekNik()
     {
@@ -83,6 +93,9 @@ class Login extends Component
             $this->validate([
                 'nik' => ['required','min:5'],
             ]);
+            if ($this->tooManyAttempts('cek-nik', 10)) {
+                return;
+            }
             $user=User::where('nik',$this->nik)->first();
             if($user)
             {
@@ -111,8 +124,24 @@ class Login extends Component
             'confirm_password' => 'required|same:new_password',
         ]);
     
+        if ($this->tooManyAttempts('create-password')) {
+            return;
+        }
+
         $user = User::where('nik', $this->nik)->first();
-    
+
+        // Hanya akun yang BELUM punya password boleh membuat password di sini.
+        // Tanpa cek ini, siapa pun bisa menimpa password user lain.
+        if ($user && !empty($user->password)) {
+            $this->dispatch('swal:error', [
+                'title' => 'Error!',
+                'text' => 'Akun ini sudah memiliki password. Silakan login.',
+            ]);
+            $this->step = 2;
+            $this->dispatch('step-updated', ['step' => $this->step]);
+            return;
+        }
+
         if ($user) {
             $user->password = bcrypt($this->new_password); // Enkripsi password
             $user->save();
@@ -144,11 +173,6 @@ class Login extends Component
     }
     public function render()
     {
-        $expiredSession = LoginwaSession::where('expires_at', '<=', now())->first();
-        if($expiredSession)
-        {
-            // getTokenWa();
-        }
         // $targetPhone = '62 852-7395-9891'; // Contoh nomor tujuan
         // $message = 'Ini adalah pesan tes dari aplikasi AMS.';
         // $isSuccess = sendMessageWithWhatsApp($targetPhone, $message);

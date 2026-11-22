@@ -13,6 +13,7 @@ class AssetRequestController extends Controller
     {
        
         $bast = AssetRequest::with(['requester', 'jobsite', 'currentApprover', 'items', 'approvals'])->findOrFail($id);
+        $this->authorize('view-asset-request', $bast);
         $lastPending = $bast->approvals
         ->where('status', $bast->status)
         ->sortBy('step')

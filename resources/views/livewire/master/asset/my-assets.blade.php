@@ -58,8 +58,11 @@
                                                 Accept
                                             </button>
                                         @elseif($asset->status == 'Used')
-                                            <button wire:click="openReturnModal({{ $asset->id }})" class="btn btn-sm btn-warning mb-0">
+                                            <button wire:click="openReturnModal({{ $asset->id }})" wire:loading.attr="disabled" wire:target="openReturnModal({{ $asset->id }})" class="btn btn-sm btn-warning mb-0">
                                                 Kembalikan
+                                            </button>
+                                            <button wire:click="reportLost({{ $asset->id }})" wire:loading.attr="disabled" wire:target="reportLost({{ $asset->id }})" class="btn btn-sm btn-outline-danger mb-0 ms-1">
+                                                Laporkan hilang
                                             </button>
                                            
                                         @endif
@@ -83,6 +86,7 @@
         </div>
     </div>
     @livewire('modal.asset.pengembalian')
+    @livewire('modal.asset.disposal')
 </div>
 
 @push('scripts')

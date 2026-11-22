@@ -85,20 +85,20 @@ class Chat extends Component
             'history' => $history,
         ];
        
-        $webhook = env('N8N_WEBHOOK_URL');
+        $webhook = config('services.n8n.webhook_url');
 
         try {
             if ($uploaded) {
-                $response = Http::withoutVerifying()->withHeaders([
-                    'AIBAGUS' => env('N8N_SECRET_TOKEN') ?? ''
+                $response = Http::withHeaders([
+                    'AIBAGUS' => config('services.n8n.secret_token') ?? ''
                 ])->attach(
                     'file',
                     file_get_contents(storage_path('app/'.$uploaded->file_path)),
                     $uploaded->file_name
                 )->post($webhook, $payload);
             } else {
-                $response = Http::withoutVerifying()->withHeaders([
-                    'AIBAGUS' => env('N8N_SECRET_TOKEN') ?? ''
+                $response = Http::withHeaders([
+                    'AIBAGUS' => config('services.n8n.secret_token') ?? ''
                 ])->post($webhook, $payload);
             }
             $data = $response->json();

@@ -52,18 +52,19 @@ return [
         'smtp2' => [
             'transport' => 'smtp',
             'url' => env('MAIL_URL'),
-            'host' => 'mail.binasaranasukses.com',
-            'port' => 587,
-            'encryption' => 'tls',
-            'username' => 'no-reply@binasaranasukses.com',
-            'password' => 'spirit8552023h',
+            'host' => env('MAIL2_HOST', 'mail.binasaranasukses.com'),
+            'port' => env('MAIL2_PORT', 587),
+            'encryption' => env('MAIL2_ENCRYPTION', 'tls'),
+            'username' => env('MAIL2_USERNAME'),
+            'password' => env('MAIL2_PASSWORD'),
             'timeout' => null,
-            'local_domain' => 'mail.binasaranasukses.com',
+            'local_domain' => env('MAIL2_LOCAL_DOMAIN', 'mail.binasaranasukses.com'),
             'stream' => [
                 'ssl' => [
-                    'allow_self_signed' => true,
-                    'verify_peer' => false,
-                    'verify_peer_name' => false,
+                    // Sertifikat mail server valid (Let's Encrypt), jadi verifikasi aktif secara default.
+                    'allow_self_signed' => ! env('MAIL2_VERIFY_PEER', true),
+                    'verify_peer' => (bool) env('MAIL2_VERIFY_PEER', true),
+                    'verify_peer_name' => (bool) env('MAIL2_VERIFY_PEER', true),
                 ],
             ],
         ],

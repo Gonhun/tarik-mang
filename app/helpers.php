@@ -65,7 +65,7 @@ if (!function_exists('PhoneFormat')) {
          */
         function callGeminiApi(array $parts, string $model = 'gemini-1.5-flash-latest'): ?string
         {
-            $apiKey = env('GEMINI_API_KEY');
+            $apiKey = config('gemini.api_key');
 
             if (empty($apiKey)) {
                 Log::error('GEMINI_API_KEY tidak diset di .env');
@@ -275,7 +275,7 @@ if (!function_exists('getTokenWa')) {
 
         try {
             // Mengirim request ke API
-            $response = Http::withoutVerifying()->timeout(30)->post($apiUrl . '/external/login', [
+            $response = Http::withOptions(['verify' => config('services.loginwa.verify_ssl')])->timeout(30)->post($apiUrl . '/external/login', [
                 'phone_number' => $number,
                 'private_key' => $privateKey,
             ]);
@@ -464,7 +464,7 @@ if (!function_exists('sendMessageWithWhatsApp')) {
         }
 
         try {
-            $response = Http::withoutVerifying()->withToken($token) // <-- Menambahkan header 'Authorization: Bearer <token>'
+            $response = Http::withOptions(['verify' => config('services.loginwa.verify_ssl')])->withToken($token) // <-- Menambahkan header 'Authorization: Bearer <token>'
                 ->timeout(30) // Set timeout 30 detik
                 ->post($sendMessageUrl . '/external/send-message', [
                     'phone_number' => $targetPhoneNumber,
@@ -506,7 +506,7 @@ if (!function_exists('sendMessageWithWhatsApp')) {
         }
 
         try {
-            $response = Http::withoutVerifying()->timeout(30)->withHeaders([
+            $response = Http::withOptions(['verify' => config('services.loginwa.verify_ssl')])->timeout(30)->withHeaders([
                 'wapikey' => $privateKey,
             ])->post($apiUrl, [
                 'to_number' => $targetPhoneNumber,

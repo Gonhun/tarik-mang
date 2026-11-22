@@ -16,6 +16,11 @@ return [
     'name' => env('APP_NAME', 'Laravel'),
 
     /*
+    | ID department tim IT (helpdesk tiket, PIC IT site).
+    */
+    'it_department_id' => (int) env('APP_IT_DEPARTMENT_ID', 8),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Environment
     |--------------------------------------------------------------------------

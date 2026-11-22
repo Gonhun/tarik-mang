@@ -1,252 +1,290 @@
+@php
+    // Warna badge status aset, dipakai konsisten di seluruh halaman.
+    $statusColor = [
+        'Free' => 'success', 'Used' => 'primary', 'Pre-Used' => 'info',
+        'Repair' => 'warning', 'Demage' => 'danger', 'Missing' => 'danger',
+        'Pending Inspection' => 'warning', 'Pending Mutation' => 'info', 'Delivery' => 'info',
+        'Pre Disposed' => 'secondary', 'Disposed' => 'dark', 'Scrap' => 'dark',
+    ];
+    $listTargets = 'search,selectedJobsite,selectedStatus,perPage,resetFilters,gotoPage,nextPage,previousPage';
+@endphp
 <div>
     <div class="container-fluid py-4">
-        <div class="nav-wrapper position-relative end-0">
-            <ul class="nav nav-pills nav-fill p-1" role="tablist">
-                <li class="nav-item">
-                    <a class="nav-link {{ $tab == 1 ? 'active' : '' }} mb-0 px-0 py-1" data-bs-toggle="tab" wire:click="$set('tab', 1)" role="tab" aria-selected="true">
-                        <i class="bx bx-home me-1"></i> Home
-                    </a>
-                    
-                </li>
-                {{-- <li class="nav-item ">
-                    <a class="nav-link {{ $tab == 2 ? 'active' : '' }} mb-0 px-0 py-1" data-bs-toggle="tab" wire:click="$set('tab', 2)" role="tab" aria-selected="false">
-                        <i class="bx bx-cart-add me-1"></i> QC From PO
-                        @if(isset($waittingGRCount) && $waittingGRCount > 0)
-                            <span class="badge badge-pill bg-danger ms-1">{{ $waittingGRCount }}</span>
-                        @endif
-                    </a>
-                </li> --}}
-                {{-- <li class="nav-item">
-                    <a class="nav-link mb-0 px-0 py-1" data-bs-toggle="tab" href="#menu2" role="tab" aria-selected="false">
-                        <i class="fas fa-cog me-1"></i> Menu 2
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link mb-0 px-0 py-1" data-bs-toggle="tab" href="#menu3" role="tab" aria-selected="false">
-                        <i class="fas fa-chart-bar me-1"></i> Menu 3
-                    </a>
-                </li> --}}
-            </ul>
+        {{-- Header --}}
+        <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+            <div>
+                <h4 class="mb-1">Manajemen Aset</h4>
+                <p class="text-muted mb-0">
+                    {{ number_format($assetsCollection->total(), 0, ',', '.') }} aset
+                    @if ($search || $selectedJobsite || $selectedStatus) sesuai filter @else terdaftar @endif
+                </p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <button wire:click="exportExcel" wire:loading.attr="disabled" wire:target="exportExcel" class="btn btn-outline-success btn-sm">
+                    <span wire:loading.remove wire:target="exportExcel"><i class="bx bx-bxs-file-export me-1"></i>Ekspor Excel</span>
+                    <span wire:loading wire:target="exportExcel"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengekspor...</span>
+                </button>
+                <button wire:click="create()" wire:loading.attr="disabled" wire:target="create" class="btn btn-primary btn-sm">
+                    <span wire:loading.remove wire:target="create"><i class="bx bx-plus me-1"></i>Tambah Aset</span>
+                    <span wire:loading wire:target="create"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Membuka...</span>
+                </button>
+            </div>
         </div>
-        <div class="row">
-            
-            <div class="tab-content col-12">
-               @if ($tab==1)
-                <div class="tab-pane fade active show card ">
-                    <div class="card-header pb-0">
-                        <div class="d-flex justify-content-between">
-                            <h5 class="mb-0">Manajemen Aset</h5>
-                            <div class="d-flex">
-                                {{-- Tombol BARU untuk Ekspor --}}
-                                <button wire:click="exportExcel" class="btn btn-success btn-sm mb-0 me-2">
-                                    <span wire:loading.remove wire:target="exportExcel">
-                                        <i class="bx bx-bxs-file-export me-1"></i> Ekspor ke Excel
-                                    </span>
-                                    <span wire:loading wire:target="exportExcel">
-                                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                        Mengekspor...
-                                    </span>
-                                </button>
-                                
-                                {{-- Tombol Tambah Aset --}}
-                                <button wire:click="create()" class="btn btn-primary btn-sm mb-0">
-                                    <i class="bx bx-bxs-file-plus me-1"></i> Tambah Aset Baru
-                                </button>
-                            </div>
+
+        @if (session()->has('message'))
+            <div class="alert alert-success alert-dismissible" role="alert">
+                {{ session('message') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+            </div>
+        @endif
+        @if (session()->has('error'))
+            <div class="alert alert-danger alert-dismissible" role="alert">
+                {{ session('error') }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Tutup"></button>
+            </div>
+        @endif
+
+        {{-- Ringkasan status (klik untuk filter) --}}
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            <button type="button" wire:click="$set('selectedStatus', '')"
+                class="btn btn-sm {{ $selectedStatus === '' ? 'btn-dark' : 'btn-outline-secondary' }}">
+                Semua <span class="badge bg-label-secondary ms-1">{{ number_format($statusCounts->sum(), 0, ',', '.') }}</span>
+            </button>
+            @foreach ($statusCounts as $status => $total)
+                @php $c = $statusColor[$status] ?? 'secondary'; @endphp
+                <button type="button" wire:click="$set('selectedStatus', @js($status))"
+                    class="btn btn-sm {{ $selectedStatus === $status ? 'btn-' . $c : 'btn-outline-' . $c }}">
+                    {{ $status }} <span class="badge bg-label-{{ $c }} ms-1">{{ number_format($total, 0, ',', '.') }}</span>
+                </button>
+            @endforeach
+        </div>
+
+        <div class="card">
+            {{-- Filter --}}
+            <div class="card-body border-bottom pb-3">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-5">
+                        <div class="input-group input-group-sm">
+                            <span class="input-group-text"><i class="bx bx-search"></i></span>
+                            <input wire:model.live.debounce.400ms="search" type="search" class="form-control"
+                                placeholder="No aset, no lama, SN, tipe, merek, seri, kode material, pemegang..." aria-label="Cari aset">
                         </div>
-                        @if (session()->has('message'))
-                            <div class="alert alert-success mt-3" role="alert">
-                                {{ session('message') }}
-                            </div>
-                        @endif
-                        @if (session()->has('error'))
-                            <div class="alert alert-danger mt-3" role="alert">
-                                {{ session('error') }}
-                            </div>
-                        @endif
                     </div>
-                    <div class="card-body px-0 pt-0 pb-2">
-                        
-                        <div class="row px-2 pt-2 gx-2 gy-2 mb-3">
-                            <div class="col-md-3">
-                                <input wire:model.live.debounce.300ms="search" type="text" class="form-control form-control-sm" placeholder="Cari No Aset, SN, Tipe...">
-                            </div>
-                            <div class="col-md-3">
-                                <select wire:model.live="selectedJobsite" class="form-select form-select-sm">
-                                    <option value="">Semua Jobsite</option>
-                                    @foreach ($jobsites as $jobsite)
-                                        <option value="{{ $jobsite->id }}">{{ $jobsite->code }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <select wire:model.live="selectedStatus" class="form-select form-select-sm">
-                                    <option value="">Semua Status</option>
-                                    @foreach ($statuses as $stat)
-                                        <option value="{{ $stat->status }}">{{ $stat->status }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            
-                                
-                            
-                        </div>
-                        <div class="table-responsive p-0">
-                            <table class="table align-items-center mb-0">
-                                <thead>
-                                    <tr>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7">No Aset</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Tipe</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Merek</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Seri</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">SN</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Status</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Pemegang</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Jobsite</th>
-                                        <th class="text-uppercase text-secondary text-xxs font-weight-bolder opacity-7 ps-2">Entitas</th>
-                                        <th class="text-secondary opacity-7"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @forelse ($assetsCollection as $asset)
-                                        <tr>
-                                            <td><p class="text-xs font-weight-bold mb-0 px-3">{{ $asset->asset_number }}
-                                                <a href="{{ route('assets.print-single-label', ['asset' => $asset->id]) }}" 
-                                                    target="_blank" 
-                                                    class="btn btn-link text-info text-gradient p-1 mb-0" 
-                                                    data-bs-toggle="tooltip" 
-                                                    title="Cetak Label Aset Ini">
-                                                    <i class="bx bx-printer"></i>
-                                                </a>
-                                            </p>
-                                                @if($asset->old_asset_number)<p class="text-xs text-secondary mb-0 px-3">Lama: {{ $asset->old_asset_number }}</p>@endif
-                                            </td>
-                                            <td>
-                                                <p class="text-xs font-weight-bold mb-0">
-                                                    {{ $asset->assetType->name ?? 'N/A' }}
-                                                
-                                                    {{-- {{ route('asset-request.print', $item->assetRequest->id) }} --}}
-                                                    
-                                                
-                                                </p>
-                                            </td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->assetBrand->name ?? 'N/A' }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->assetSeries->name ?? 'N/A' }}</p><p class="text-xs text-secondary mb-0 px-3">{{ $asset->assetSeries->material_code}}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->serial_number }}</p></td>
-                                            <td><span class="badge badge-sm bg-gradient-{{ $asset->status == 'Free' ? 'success' : ($asset->status == 'Used' ? 'info' : ($asset->status == 'Repair' ? 'warning' : 'secondary')) }}">{{ $asset->status }}</span></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->holder->name ?? '-' }} </p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->jobsite->name ?? '-' }}</p></td>
-                                            <td><p class="text-xs font-weight-bold mb-0">{{ $asset->entity->name ?? 'N/A' }}</p></td>
-                                            <td class="align-middle">
-                                                <div class="d-flex align-items-center gap-2 flex-wrap">
-                                                    <div class="dropdown">
-                                                        <button class="btn btn-sm btn-outline-secondary shadow" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Aksi">
-                                                            <i class="bx bx-dots-horizontal"></i>
-                                                        </button>
-                                                        <ul class="dropdown-menu animate__animated animate__fadeIn">
-                                                            <li>
-                                                                <a class="dropdown-item d-flex align-items-center" href="{{ route('assets.show', $asset->asset_number) }}">
-                                                                    <i class="bx bx-show me-2 text-info"></i>
-                                                                    <span>Lihat Detail</span>
-                                                                </a>
-                                                            </li>
-                                                            @can('Edit Inventaris')
-                                                            <li>
-                                                                <a wire:click="edit({{ $asset->id }})" class="dropdown-item d-flex align-items-center">
-                                                                    <i class="bx bx-edit-alt me-2 text-warning"></i>
-                                                                    <span>Edit Aset</span>
-                                                                </a>
-                                                            </li>
-                                                            @endcan
-                                                            @if ($asset->status == 'Pre-Used' || $asset->status == 'Used')
-                                                            <li>
-                                                                <a wire:click="openReturnModal({{ $asset->id }})"
-                                                                    onclick="confirm('Apakah Anda yakin ingin mengembalikan aset ini: {{ $asset->asset_number }}?') || event.stopImmediatePropagation()"
-                                                                    class="dropdown-item d-flex align-items-center" href="#">
-                                                                    <i class="bx bx-arrow-back me-2"></i>
-                                                                    <span>Pengembalian</span>
-                                                                </a>
-                                                            </li>
-                                                                @if(!empty($asset->asset_transaction_id))
-                                                                    <li>
-                                                                        <a href="{{ route('asset.bast', $asset->id) }}"
-                                                                            target="_blank" 
-                                                                            class="dropdown-item d-flex align-items-center">
-                                                                            <i class="bx bx-bxs-file-pdf me-2"></i>
-                                                                            <span>Print BA</span>
-                                                                        </a>
-                                                                    </li>
-                                                                @endif
-                                                            @endif
-                                                            
-                                                        </ul>
-                                                    </div>
-                                                    @if ($asset->status == 'Free')
-                                                        <button wire:click="createBast({{ $asset->id }})"
-                                                            class="btn btn-sm btn-info d-flex align-items-center"
-                                                            data-bs-toggle="tooltip" title="Serah Terima Aset">
-                                                            <i class="bx bx-transfer me-1"></i>
-                                                            <span>Serah Terima</span>
-                                                        </button>
-                                                    @endif
-                                                   
-                                                    @if (substr($asset->status, 0, 4) === 'Pre-' && $asset->holder_user_id != Auth::id())
-                                                        <button wire:click="SendFUWhatApp({{ $asset->holder_user_id }})"
-                                                            class="btn btn-sm btn-success d-flex align-items-center"
-                                                            data-bs-toggle="tooltip" title="Follow Up User">
-                                                            <i class="bx bxl-whatsapp me-1"></i>
-                                                            <span>Follow Up</span>
-                                                        </button>
-                                                    @endif
-                                                    @if ($asset->status == 'Pending Inspection')
-                                                        <button wire:click="inspectAsset('{{ $asset->id }}')"
-                                                            class="btn btn-sm btn-warning d-flex align-items-center"
-                                                            data-bs-toggle="tooltip" title="Inspeksi Aset">
-                                                            <i class="bx bx-search-alt-2 me-1"></i>
-                                                            <span>Inspeksi</span>
-                                                        </button>
-                                                    @endif
-                                                </div>
-                                                
-                                            </td>
-                                        </tr>
-                                        <tr>
-                                            <td>Lokasi</td>
-                                            <td colspan="9">{{$asset->current_location_detail}}</td>
-                                        </tr>
-                                    @empty
-                                        <tr><td colspan="9" class="text-center py-4">Tidak ada data aset ditemukan.</td></tr>
-                                    @endforelse
-                                </tbody>
-                            </table>
-                        </div>
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div class="px-4 pt-3">
-                                <label for="perPage" class="form-label mb-0 me-2">Tampilkan</label>
-                                <select wire:model.live="perPage" id="perPage" class="form-select form-select-sm w-auto d-inline-block">
-                                    <option value="10">10</option>
-                                    <option value="25">25</option>
-                                    <option value="50">50</option>
-                                    <option value="100">100</option>
-                                </select>
-                                <span class="ms-1">data per halaman</span>
-                            </div>
-                        
-                            {{-- Optional: tampilkan total data --}}
-                        </div>
-                        <div class="px-4 pt-3">
-                            {{ $assetsCollection->links() }}
-                        </div>
-                        
+                    <div class="col-6 col-md-3">
+                        <select wire:model.live="selectedJobsite" class="form-select form-select-sm" aria-label="Filter site">
+                            <option value="">Semua site</option>
+                            @foreach ($jobsites as $jobsite)
+                                <option value="{{ $jobsite->id }}">{{ $jobsite->code }} · {{ $jobsite->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <select wire:model.live="selectedStatus" class="form-select form-select-sm" aria-label="Filter status">
+                            <option value="">Semua status</option>
+                            @foreach ($statusCounts as $status => $total)
+                                <option value="{{ $status }}">{{ $status }} ({{ $total }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-flex gap-2 justify-content-md-end align-items-center">
+                        <span wire:loading.delay wire:target="{{ $listTargets }}" class="spinner-border spinner-border-sm text-primary" role="status" aria-label="Memuat"></span>
+                        @if ($search || $selectedJobsite || $selectedStatus)
+                            <button wire:click="resetFilters" class="btn btn-sm btn-outline-secondary">
+                                <i class="bx bx-x me-1"></i>Reset
+                            </button>
+                        @endif
                     </div>
                 </div>
-                @elseif($tab==2)
-               
-               @endif
+            </div>
+
+            {{-- Tabel --}}
+            <div class="position-relative">
+                <div wire:loading.flex wire:target="{{ $listTargets }}"
+                    class="position-absolute top-0 start-0 w-100 h-100 align-items-start justify-content-center pt-5"
+                    style="background: rgba(255,255,255,.65); z-index: 5;">
+                    <span class="badge bg-white text-primary shadow-sm px-3 py-2">
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>Memuat data...
+                    </span>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Aset</th>
+                                <th>Barang</th>
+                                <th>Status</th>
+                                <th>Pemegang & lokasi</th>
+                                <th class="d-none d-xl-table-cell">Site / entitas</th>
+                                <th class="d-none d-xxl-table-cell">Pembelian</th>
+                                <th class="text-end">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($assetsCollection as $asset)
+                                @php $c = $statusColor[$asset->status] ?? 'secondary'; @endphp
+                                <tr wire:key="asset-row-{{ $asset->id }}">
+                                    <td>
+                                        <a href="{{ route('assets.show', $asset->asset_number) }}" class="fw-semibold text-heading">{{ $asset->asset_number }}</a>
+                                        <a href="{{ route('assets.print-single-label', ['asset' => $asset->id]) }}" target="_blank"
+                                            class="text-muted ms-1" title="Cetak label" aria-label="Cetak label {{ $asset->asset_number }}"><i class="bx bx-printer"></i></a>
+                                        @if ($asset->old_asset_number)
+                                            <small class="d-block text-muted">Lama: {{ $asset->old_asset_number }}</small>
+                                        @endif
+                                        <small class="d-block text-muted">SN: {{ $asset->serial_number ?: '-' }}</small>
+                                    </td>
+                                    <td>
+                                        <span class="d-block fw-medium">{{ $asset->assetType->name ?? '-' }} · {{ $asset->assetBrand->name ?? '-' }}</span>
+                                        <small class="text-muted">{{ $asset->assetSeries->name ?? '-' }}@if ($asset->assetSeries?->material_code) · {{ $asset->assetSeries->material_code }}@endif</small>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-label-{{ $c }}">{{ $asset->status }}</span>
+                                        <small class="d-block text-muted mt-1" title="{{ $asset->updated_at }}">{{ $asset->updated_at?->locale('id')->diffForHumans() }}</small>
+                                    </td>
+                                    <td style="max-width: 260px">
+                                        @if ($asset->holder)
+                                            <span class="d-block fw-medium text-truncate">{{ $asset->holder->name }}</span>
+                                            <small class="text-muted">{{ $asset->holder->nik }}</small>
+                                        @else
+                                            <span class="text-muted">Tidak ada pemegang</span>
+                                        @endif
+                                        @if ($asset->current_location_detail)
+                                            <small class="d-block text-muted text-truncate" title="{{ $asset->current_location_detail }}">
+                                                <i class="bx bx-map-pin"></i> {{ $asset->current_location_detail }}
+                                            </small>
+                                        @endif
+                                    </td>
+                                    <td class="d-none d-xl-table-cell">
+                                        <span class="d-block">{{ $asset->jobsite->code ?? '-' }}</span>
+                                        <small class="text-muted">{{ $asset->entity->code ?? $asset->entity->name ?? '-' }}@if ($asset->departement) · {{ $asset->departement->code }}@endif</small>
+                                    </td>
+                                    <td class="d-none d-xxl-table-cell">
+                                        <small class="d-block">PR {{ $asset->pr_number ?: '-' }}</small>
+                                        <small class="d-block">PO {{ $asset->po_number ?: '-' }}</small>
+                                        <small class="d-block text-muted">CC {{ $asset->costCenter->cost_center_number ?? '-' }}</small>
+                                    </td>
+                                    <td class="text-end text-nowrap">
+                                        {{-- Aksi utama sesuai status --}}
+                                        @if ($asset->status == 'Free')
+                                            <button wire:click="createBast({{ $asset->id }})" wire:loading.attr="disabled" wire:target="createBast({{ $asset->id }})" class="btn btn-sm btn-primary">
+                                                <span wire:loading.remove wire:target="createBast({{ $asset->id }})"><i class="bx bx-transfer me-1"></i>Serah terima</span>
+                                                <span wire:loading wire:target="createBast({{ $asset->id }})"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                                            </button>
+                                        @elseif ($asset->status == 'Pending Inspection')
+                                            <button wire:click="inspectAsset({{ $asset->id }})" wire:loading.attr="disabled" wire:target="inspectAsset({{ $asset->id }})" class="btn btn-sm btn-warning">
+                                                <span wire:loading.remove wire:target="inspectAsset({{ $asset->id }})"><i class="bx bx-search-alt-2 me-1"></i>Inspeksi</span>
+                                                <span wire:loading wire:target="inspectAsset({{ $asset->id }})"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                                            </button>
+                                        @elseif ($asset->status == 'Pre-Used' && $asset->holder_user_id && $asset->holder_user_id != Auth::id())
+                                            <button wire:click="SendFUWhatApp({{ $asset->holder_user_id }})" wire:loading.attr="disabled" wire:target="SendFUWhatApp({{ $asset->holder_user_id }})" class="btn btn-sm btn-outline-success" title="Ingatkan penerima untuk konfirmasi">
+                                                <span wire:loading.remove wire:target="SendFUWhatApp({{ $asset->holder_user_id }})"><i class="bx bx-bxl-whatsapp me-1"></i>Follow up</span>
+                                                <span wire:loading wire:target="SendFUWhatApp({{ $asset->holder_user_id }})"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                                            </button>
+                                        @endif
+
+                                        <div class="dropdown d-inline-block">
+                                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-label="Aksi lain {{ $asset->asset_number }}">
+                                                <i class="bx bx-dots-horizontal-rounded"></i>
+                                            </button>
+                                            <ul class="dropdown-menu dropdown-menu-end">
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ route('assets.show', $asset->asset_number) }}">
+                                                        <i class="bx bx-show me-2"></i>Detail & riwayat
+                                                    </a>
+                                                </li>
+                                                @can('Edit Inventaris')
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="edit({{ $asset->id }})">
+                                                            <i class="bx bx-edit-alt me-2"></i>Edit aset
+                                                        </a>
+                                                    </li>
+                                                @endcan
+                                                @if (in_array($asset->status, ['Pre-Used', 'Used']))
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="openReturnModal({{ $asset->id }})"
+                                                            wire:confirm="Kembalikan aset {{ $asset->asset_number }} dari {{ $asset->holder->name ?? 'pemegang' }}?">
+                                                            <i class="bx bx-undo me-2"></i>Pengembalian
+                                                        </a>
+                                                    </li>
+                                                @endif
+                                                @if (in_array($asset->status, \App\Livewire\Modal\Asset\Disposal::LOSABLE))
+                                                    <li>
+                                                        <a class="dropdown-item text-warning" href="#" wire:click.prevent="openDisposal({{ $asset->id }}, 'LOST')">
+                                                            <i class="bx bx-error-circle me-2"></i>Laporkan hilang
+                                                        </a>
+                                                    </li>
+                                                @endif
+                                                @if (in_array($asset->status, \App\Livewire\Modal\Asset\Disposal::DISPOSABLE))
+                                                    <li>
+                                                        <a class="dropdown-item text-danger" href="#" wire:click.prevent="openDisposal({{ $asset->id }}, 'DISPOSE')">
+                                                            <i class="bx bx-trash me-2"></i>Ajukan disposal
+                                                        </a>
+                                                    </li>
+                                                @endif
+                                                @if ($asset->asset_transaction_id || $asset->asset_transaction_return_id)
+                                                    <li><hr class="dropdown-divider"></li>
+                                                    <li><h6 class="dropdown-header">Cetak berita acara</h6></li>
+                                                @endif
+                                                @if ($asset->asset_transaction_id)
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('asset.ba.print', ['transaction' => $asset->asset_transaction_id, 'asset' => $asset->id]) }}" target="_blank">
+                                                            <i class="bx bx-bxs-file-pdf me-2"></i>BA serah terima terakhir
+                                                        </a>
+                                                    </li>
+                                                @endif
+                                                @if ($asset->asset_transaction_return_id)
+                                                    <li>
+                                                        <a class="dropdown-item" href="{{ route('asset.ba.print', ['transaction' => $asset->asset_transaction_return_id, 'asset' => $asset->id]) }}" target="_blank">
+                                                            <i class="bx bx-bxs-file-pdf me-2"></i>BA pengembalian terakhir
+                                                        </a>
+                                                    </li>
+                                                @endif
+                                                <li>
+                                                    <a class="dropdown-item" href="{{ route('assets.show', ['asset' => $asset->asset_number, 'tab' => 'dokumen']) }}">
+                                                        <i class="bx bx-history me-2"></i>Semua BA (cetak ulang)
+                                                    </a>
+                                                </li>
+                                            </ul>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted py-5">
+                                        <i class="bx bx-package fs-1 d-block mb-2"></i>
+                                        Tidak ada aset yang cocok.
+                                        @if ($search || $selectedJobsite || $selectedStatus)
+                                            <a href="#" wire:click.prevent="resetFilters">Hapus filter</a>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            {{-- Paginasi --}}
+            <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-3 border-top">
+                <div class="d-flex align-items-center gap-2 small text-muted">
+                    <label for="perPage" class="mb-0">Tampilkan</label>
+                    <select wire:model.live="perPage" id="perPage" class="form-select form-select-sm w-auto">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                    <span>
+                        @if ($assetsCollection->total())
+                            {{ $assetsCollection->firstItem() }}–{{ $assetsCollection->lastItem() }} dari {{ number_format($assetsCollection->total(), 0, ',', '.') }}
+                        @endif
+                    </span>
+                </div>
+                <div>{{ $assetsCollection->links() }}</div>
             </div>
         </div>
     </div>
-   
+
     {{-- Modal Create/Edit Asset --}}
     @if ($isModalOpen)
         <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
@@ -456,34 +494,6 @@
     @livewire('modal.asset.inspection')
     @livewire('modal.asset.bast')
     @livewire('modal.asset.pengembalian')
+    @livewire('modal.asset.disposal')
 </div>
 
-@push('scripts')
-{{-- Skrip tooltip Bootstrap sama seperti sebelumnya --}}
-<script>
-    document.addEventListener('livewire:load', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-    Livewire.hook('message.processed', (message, component) => {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            var A = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
-            if(A) A.dispose();
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-    Livewire.on('swal:success', event => {
-                const detail = event[0] || event;
-            Swal.fire({
-                icon: 'success',
-                title: detail.title,
-                text: detail.text,
-                timer: 2500,
-                showConfirmButton: false,
-            });
-        });
-</script>
-@endpush

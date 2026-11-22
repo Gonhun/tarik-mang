@@ -65,7 +65,7 @@ class WorkflowVisualizerModal extends Component
             {
                 $userQuery->where('id',$step->user_id);
                 $approverUser = $userQuery->first();
-                $this->resolvedApprovers[$step->id] = $approverUser ? $approverUser->name : '<span class="text-danger">Tidak Ditemukan</span>';
+                $this->resolvedApprovers[$step->id] = $approverUser ? e($approverUser->name) : '<span class="text-danger">Tidak Ditemukan</span>';
                 continue;
             }
             if(!empty($approverDepartment))
@@ -100,7 +100,7 @@ class WorkflowVisualizerModal extends Component
                
             }
            
-            $this->resolvedApprovers[$step->id] = $approverUser ? $approverUser->name : '<span class="text-danger">Tidak Ditemukan</span>';
+            $this->resolvedApprovers[$step->id] = $approverUser ? e($approverUser->name) : '<span class="text-danger">Tidak Ditemukan</span>';
            
         }
        
@@ -110,13 +110,13 @@ class WorkflowVisualizerModal extends Component
         //         if(!in_array($requester->jobsite->code, ['JKT', 'SMD'])){
                    
         //             $approverUser = $this->findApproverForPosition($step->approverPositionLevel, $requester);
-        //             $this->resolvedApprovers[$step->id] = $approverUser ? $approverUser->name : '<span class="text-danger">Tidak Ditemukan</span>';
+        //             $this->resolvedApprovers[$step->id] = $approverUser ? e($approverUser->name) : '<span class="text-danger">Tidak Ditemukan</span>';
         //         }else{
         //             continue;
         //         }
         //     }else{
         //         $approverUser = $this->findApproverForPosition($step->approverPositionLevel, $requester);
-        //         $this->resolvedApprovers[$step->id] = $approverUser ? $approverUser->name : '<span class="text-danger">Tidak Ditemukan</span>';
+        //         $this->resolvedApprovers[$step->id] = $approverUser ? e($approverUser->name) : '<span class="text-danger">Tidak Ditemukan</span>';
         //     }
            
         // }

@@ -5,7 +5,6 @@ use App\Http\Controllers\AssetLabelController;
 use App\Http\Controllers\pdf\BastPrint;
 use App\Http\Controllers\AssetTransactionController;
 use App\Http\Controllers\pdf\MutasiController;
-use App\Http\Controllers\PdfController;
 use App\Http\Controllers\pdf\PengembalianController;
 use App\Livewire\Forecast\DetailManageForecast;
 use App\Livewire\Forecast\ManageForecast;
@@ -29,7 +28,7 @@ Route::middleware('auth')->group(function () {
         ->middleware('can:Add Permissions');
     Route::get('/organization-chart', App\Livewire\Profile\OrganizationalChart::class)
         ->name('organization-chart')
-        ->middleware('auth');
+        ;
 
     Route::get('/admin/wa', App\Livewire\Admin\Whatsapp::class)->name('admin.wa')->middleware('can:Whatsapp');
 
@@ -40,7 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/licenses/{id}', App\Livewire\Licenses\View::class)->name('licenses.detail')->whereNumber('id')->middleware('can:Lisensi');
     Route::get('/licenses/requests/add', App\Livewire\LicensesRequests\Request::class)->name('requests.license.add');
     Route::get('/licenses/requests', App\Livewire\LicensesRequests\Main::class)->name('requests.license.main');
-    Route::get('/licenses/requests/renew/{id}', App\Livewire\LicensesRequests\RenewRequest::class)->name('requests.license.renew');
+    Route::get('/licenses/requests/renew/{id}', App\Livewire\LicensesRequests\RenewRequest::class)->name('requests.license.renew')->whereNumber('id');
     Route::get('/licenses/pdf/{id}', [App\Http\Controllers\pdf\requestLicensi::class, 'view'])->name('licenses.pdf')->whereNumber('id');
 
     Route::get('/isr', App\Livewire\Isr\Main::class)->name('Isr.main')->middleware('can:Isr');
@@ -73,7 +72,7 @@ Route::middleware('auth')->group(function () {
 
 
     Route::get('/maps', App\Livewire\GpsMapViewer::class)->name('GpsMapViewer');
-    Route::get('/dashboard', App\Livewire\Dashboard\AssetDashboard::class)->name('dashboard'); // Misal halaman utama setelah login adalah absensi
+    Route::get('/dashboard', App\Livewire\Dashboard\Index::class)->name('dashboard'); // Misal halaman utama setelah login adalah absensi
     Route::get('/my/asset', App\Livewire\Master\Asset\MyAssets::class)->name('my.asset');
     Route::get('/my/clearance', App\Livewire\ItClearanceForm::class)->name('my.clearance');
     Route::get('/asset', App\Livewire\Master\Asset\ManageAsset::class)->name('asset.index')->middleware('can:Master Asset');
@@ -84,25 +83,32 @@ Route::middleware('auth')->group(function () {
         ->whereNumber('id')
         ->name('asset.mutasi.pdf')
         ->middleware('can:Master Asset');
+    // Cetak (ulang) berita acara per transaksi, termasuk BA lama. Otorisasi di controller.
+    Route::get('/asset/ba/{transaction}/{asset}', [App\Http\Controllers\pdf\AssetBaPrint::class, 'view'])
+        ->whereNumber(['transaction', 'asset'])
+        ->name('asset.ba.print');
     Route::get('/asset/qc', App\Livewire\Master\Asset\QcAsset::class)->name('asset.qc')->middleware('can:Master Asset');
 
     Route::get('/asset/disposed', App\Livewire\AssetDisposals\ManageDisposed::class)->name('asset.disposed')->middleware('can:Mutasi');
 
     Route::get('/asset/mutasi', App\Livewire\AssetMutations\ManageMutations::class)->name('asset.mutasi')->middleware('can:Mutasi');
 
-    Route::get('/asset/transaksi/show/{transaction}', App\Livewire\AssetMutations\ShowAssetTransaction::class)->name('asset.mutasi-status')->middleware('can:Mutasi');
+    // Approver (mis. disposal/kehilangan) belum tentu punya izin Mutasi: cek lewat gate transaksi.
+    Route::get('/asset/transaksi/show/{transaction}', App\Livewire\AssetMutations\ShowAssetTransaction::class)->name('asset.mutasi-status')->middleware('can:view-asset-transaction,transaction');
     Route::get('/asset/show/{asset:asset_number}', App\Livewire\Master\Asset\AssetDetail::class)->name('assets.show');
     Route::get('/assets/{asset}/print-label', [AssetLabelController::class, 'printSingle'])
-        ->name('assets.print-single-label');
+        ->name('assets.print-single-label')->middleware('can:print-asset-label,asset');
     Route::get('/asset-transactions/{transaction}/print', [AssetTransactionController::class, 'print'])
-        ->name('asset-transactions.print');
+        ->name('asset-transactions.print')->middleware('can:view-asset-transaction,transaction');
     Route::get('/myprofil', App\Livewire\Profile\Profil::class)->name('myprofil');
 
-    Route::get('/coa/pivot', GeneratePivotCoa::class)->name(name: 'master.forecast.pivot');
-    Route::get('/coa', Coa::class)->name('coa.index');
-    Route::get('/master/forecast', RefForecast::class)->name('forecast.index');
-    Route::get('/forecast/manage', ManageForecast::class)->name('forecast.manage');
-    Route::get('/forecast/detail/{id}', DetailManageForecast::class)->name('forecast.detail');
+    Route::middleware('can:Master Asset')->group(function () {
+        Route::get('/coa/pivot', GeneratePivotCoa::class)->name(name: 'master.forecast.pivot');
+        Route::get('/coa', Coa::class)->name('coa.index');
+        Route::get('/master/forecast', RefForecast::class)->name('forecast.index');
+        Route::get('/forecast/manage', ManageForecast::class)->name('forecast.manage');
+        Route::get('/forecast/detail/{id}', DetailManageForecast::class)->name('forecast.detail');
+    });
 
     Route::get('/task', App\Livewire\Task\TaskList::class)->name('task.index');
     Route::get('/task/create', App\Livewire\Task\TaskCreate::class)->name('task.create');
@@ -116,14 +122,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/asset-requests/po-returns', App\Livewire\Procurement\ManageVendorReturns::class)->name('request.asset-po-returns')->middleware('can:Manajement Request');
     // Route::get('/bast', App\Livewire\AssetHandovers\ManageAssetHandovers::class)->name('bast.index'); 
     Route::get('/bast', App\Livewire\AssetTransactions\ManageAssetTransactions::class)->name('bast.index');
-    Route::get('/bast/{handoverId}/pdf', [PdfController::class, 'generateBastPdf'])->name('bast.pdf');
 
     Route::get('/games/tetris', App\Livewire\Games\Tetris::class)
         ->name('games.tetris');
 
     // Inventory Consumabel
-    Route::get('/inventory/master-parts', App\Livewire\Inventory\Consumables\MaseterParts::class)->name('inventory.master.parts');
-    Route::get('/inventory/parts', App\Livewire\Inventory\Consumables\Index::class)->name('inventory.parts');
+    Route::get('/inventory/master-parts', App\Livewire\Inventory\Consumables\MaseterParts::class)->name('inventory.master.parts')->middleware('can:Master Asset');
+    Route::get('/inventory/parts', App\Livewire\Inventory\Consumables\Index::class)->name('inventory.parts')->middleware('can:Master Asset');
     // Tickets Route
     // Route::get('/tickets', function(){
     //     return 'Tickets OK';
@@ -133,9 +138,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/tickets/home', App\Livewire\Tickets\Home\Index::class)
         ->name('tickets.home');
     Route::get('/tickets/categorys', App\Livewire\Tickets\Categorys\Index::class)
-        ->name('tickets.categorys');
+        ->name('tickets.categorys')->middleware('can:it-staff');
     Route::get('/tickets/subcategorys', App\Livewire\Tickets\Subcategorys\Index::class)
-        ->name('tickets.subcategorys');
+        ->name('tickets.subcategorys')->middleware('can:it-staff');
 
     Route::get('/tickets/my-tickets', App\Livewire\Tickets\Ticket\MyTickets::class)
         ->name('tickets.ticket.my-tickets');
@@ -144,6 +149,11 @@ Route::middleware('auth')->group(function () {
 
     //AI
     // Route::get('/ai/chat/{chat?}', App\Livewire\AI\Chat::class)->name('ai.chat');
+    // File upload (disk public) hanya untuk user yang login. Lihat StorageFileController.
+    Route::get('/storage/{path}', [App\Http\Controllers\StorageFileController::class, 'show'])
+        ->where('path', '.*')
+        ->name('storage.public');
+
     Route::post('/logout', function (Request $request) {
         Auth::logout(); // Atau Auth::guard('web')->logout();
 

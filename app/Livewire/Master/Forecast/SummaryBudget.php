@@ -39,7 +39,7 @@ class SummaryBudget extends Component
     {
         return DB::table('coas')
             ->select(
-                DB::raw('CASE WHEN year is null THEN ' . $this->year_filter . ' ELSE pivots.year END as year'),
+                DB::raw('CASE WHEN year is null THEN ' . (int) $this->year_filter . ' ELSE pivots.year END as year'),
                 'pivots.jobsite_id',
                 'jobsites.code as site_code',
                 DB::raw('SUM(pivots.plan_jan) as plan_jan'),
@@ -90,7 +90,7 @@ class SummaryBudget extends Component
             ->leftJoin('jobsites', 'pivots.jobsite_id', '=', 'jobsites.id')
             ->select(
                 'pivots.id',
-                DB::raw('CASE WHEN year is null THEN ' . $this->year_filter . ' ELSE pivots.year END as year'),
+                DB::raw('CASE WHEN year is null THEN ' . (int) $this->year_filter . ' ELSE pivots.year END as year'),
                 'coas.cost_element_number',
                 'coas.description',
                 'pivots.jobsite_id',

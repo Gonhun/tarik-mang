@@ -22,8 +22,12 @@ class Request extends Component
     public $items = [];
     public $categorys, $manufactures, $needed_date, $purpose, $ba_file_name, $ba_file_path;
     public $ba_file;
+    /** Pesan bila workflow lisensi belum siap. */
+    public $workflowWarning = null;
+
     public function mount()
     {
+        $this->workflowWarning = \App\Support\Workflow::problem('REQUEST_LICENSE', Auth::user());
         $this->categorys = SoftwareCategory::orderBy('name')->get();
         $this->manufactures = SoftwareManufacturer::orderBy('name')->get();
         $this->needed_date = Carbon::now()->addDays(14)->format('Y-m-d');
@@ -87,6 +91,12 @@ class Request extends Component
     }
     public function submitRequest()
     {
+        // Jangan proses sama sekali bila workflow lisensi belum siap.
+        if ($problem = \App\Support\Workflow::problem('REQUEST_LICENSE', Auth::user())) {
+            $this->workflowWarning = $problem;
+            $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $problem]);
+            return;
+        }
         $validatedData = $this->validate();
         try {
             $assetRequest = DB::transaction(function () use ($validatedData) {
@@ -180,120 +190,27 @@ class Request extends Component
     }
     protected function generateApproval(LicenseRequest $request)
     {
-        $workflow = findWorkflowForContext('REQUEST_LICENSE', $request->position_id, $request->jobsite_id);
-        if (!$workflow || $workflow->steps->isEmpty()) {
-            throw new \Exception('Alur persetujuan belum didefinisikan. Hubungi Administrator.');
+        // Workflow belum diatur / approver tidak lengkap -> WorkflowNotConfigured, pengajuan di-rollback.
+        // LicenseRequest tidak punya kolom jabatan/site, jadi konteks diambil dari pemohon.
+        $requester = $request->user ?? Auth::user();
+        $plan = \App\Support\Workflow::plan('REQUEST_LICENSE', $requester->position_id, $requester->jobsite_id);
+
+        $firstItem = $request->items()->first();
+        if (!$firstItem) {
+            throw new \App\Support\WorkflowNotConfigured('Pengajuan lisensi tidak memiliki item.');
         }
-        foreach ($workflow->steps as $step) {
-            $approverPosition = $step->approverPositionLevel;
-            $approverDepartment = $step->department_id;
 
-            $roleName = $approverPosition->name;
-
-            // Logging step info
-            Log::info('LicenseRequest Approval Step', [
-                'step_id' => $step->id,
-                'step_order' => $step->step_order,
-                'roleName' => $roleName,
-                'approverDepartment' => $approverDepartment,
-                'user_id' => $step->user_id,
+        foreach ($plan as $p) {
+            // Tahap yang approvernya = pemohon langsung disetujui otomatis.
+            $auto = (int) $p['user']->id === (int) $requester->id;
+            $firstItem->approvals()->create([
+                'license_request_item_id' => $firstItem->id,
+                'step_order' => $p['step_order'],
+                'user_id' => $p['user']->id,
+                'status' => $auto ? 'Approved' : 'Pending',
+                'remarks' => $auto ? \App\Support\Workflow::AUTO_NOTE : null,
+                'approved_at' => $auto ? now() : null,
             ]);
-
-            // Skip Project Manager if jobsite is SMD or JKT
-            if ($roleName === 'Kepala Proyek' && in_array($request->jobsite->code, ['SMD', 'JKT'])) {
-                Log::info('Skipping Kepala Proyek for SMD/JKT', [
-                    'jobsite_code' => $request->jobsite->code,
-                    'roleName' => $roleName,
-                ]);
-                continue;
-            }
-
-            // Base query
-            $userQuery = User::query();
-            if ($step->user_id) {
-                $userQuery->where('id', $step->user_id);
-                $approverUser = $userQuery->first();
-                if ($approverUser) {
-                    $request->items()->first()->approvals()->create([
-                        'license_request_item_id' => $request->items()->first()->id,
-                        'step_order' => $step->step_order,
-                        'user_id' => $approverUser->id,
-                        'status' => 'Pending',
-                    ]);
-                    Log::info('Approval created', [
-                        'step_id' => $step->id,
-                        'approver_user_id' => $approverUser->id,
-                        'roleName' => $roleName,
-                    ]);
-                    continue;
-                } else {
-                    Log::error("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.", [
-                        'step_id' => $step->id,
-                        'roleName' => $roleName,
-                    ]);
-                    throw new \Exception("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.");
-                }
-
-            }
-            if (!empty($approverDepartment)) {
-
-                $userQuery->where('department_id', $approverDepartment)
-                    ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                    ->where('jobsite_id', $request->jobsite_id);
-            } else {
-                $userQuery
-                    ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                    ->where('jobsite_id', $request->jobsite_id);
-            }
-
-            $approverUser = $userQuery->first();
-
-            Log::info('ApproverUser after main query', [
-                'step_id' => $step->id,
-                'approverUser' => $approverUser ? $approverUser->name : null,
-            ]);
-
-            if (!$approverUser) {
-                $fallbackQuery = User::query();
-                if (!empty($approverDepartment)) {
-                    $fallbackQuery->where('department_id', $approverDepartment)
-                        ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                        ->whereHas('jobsite', fn($q) => $q->where('code', 'JKT'));
-                } else {
-                    $fallbackQuery
-                        ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                        ->whereHas('jobsite', fn($q) => $q->where('code', 'JKT'));
-                }
-
-
-                $approverUser = $fallbackQuery->first();
-
-                Log::info('ApproverUser after fallback query', [
-                    'step_id' => $step->id,
-                    'approverUser' => $approverUser ? $approverUser->name : null,
-                ]);
-            }
-
-            if ($approverUser) {
-                $request->items()->first()->approvals()->create([
-                    'license_request_item_id' => $request->items()->first()->id,
-                    'step_order' => $step->step_order,
-                    'user_id' => $approverUser->id,
-                    'status' => 'Pending',
-                ]);
-                Log::info('Approval created', [
-                    'step_id' => $step->id,
-                    'user_id' => $approverUser->id,
-                    'roleName' => $roleName,
-                ]);
-            } else {
-                Log::error("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.", [
-                    'step_id' => $step->id,
-                    'roleName' => $roleName,
-                ]);
-                throw new \Exception("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.");
-            }
-
         }
     }
 

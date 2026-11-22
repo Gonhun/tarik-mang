@@ -16,26 +16,17 @@ class CreateAssetRequestForm extends Component
 {
     use WithFileUploads;
     public $purpose = '', $needed_date, $itsite, $remarks, $request_active;
-    public $items = [], $itne = [];
-    public $allTypes = [], $allBrands = [], $allSeries = [];
+    public $items = [];
     public $ba_damage, $ba_budget_outside;
     public $ba_damage_path, $ba_damage_name, $ba_budget_outside_path, $ba_budget_outside_name;
+    /** Pesan bila workflow pengajuan aset belum siap (form tidak bisa dikirim). */
+    public $workflowWarning = null;
+
     public function mount()
     {
-        $this->allTypes = AssetType::orderBy('name')->get();
-        $this->allBrands = AssetBrand::orderBy('name')->get();
-        $this->allSeries = AssetSeries::orderBy('name')->get();
+        $this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', Auth::user());
+        // Katalog tipe/merek/seri tidak disimpan di state (dimuat di render sesuai pilihan).
         $this->needed_date = Carbon::now()->addDays(14)->format('Y-m-d');
-        // $this->request_active = AssetRequest::where('requester_user_id',Auth::id())->where('status','like','Pending%')->exists();
-
-        $query = User::where('position_id', 6)
-            ->where('id', '<>', Auth::id());
-
-        if (Auth::user()->position_id != 6) {
-            $query->where('jobsite_id', Auth::user()->jobsite_id);
-        }
-        $this->itne = $query->get();
-
         $this->loadNeededAssetsForRequester();
     }
     public function loadNeededAssetsForRequester()
@@ -70,6 +61,21 @@ class CreateAssetRequestForm extends Component
     {
         $this->items[] = ['asset_type_id' => '', 'asset_brand_id' => '', 'asset_series_id' => '', 'quantity' => 1, 'item_description' => '', 'is_standard' => false, 'gr_number' => NULL, 'price' => NULL];
     }
+    /** Ganti tipe -> merek & seri lama tidak berlaku. Ganti merek -> seri lama tidak berlaku. */
+    public function updatedItems($value, $key)
+    {
+        [$index, $field] = array_pad(explode('.', $key), 2, null);
+        if (!isset($this->items[$index]) || !empty($this->items[$index]['is_standard'])) {
+            return;
+        }
+        if ($field === 'asset_type_id') {
+            $this->items[$index]['asset_brand_id'] = '';
+            $this->items[$index]['asset_series_id'] = '';
+        } elseif ($field === 'asset_brand_id') {
+            $this->items[$index]['asset_series_id'] = '';
+        }
+    }
+
     public function removeItem($index)
     {
         unset($this->items[$index]);
@@ -79,7 +85,7 @@ class CreateAssetRequestForm extends Component
     {
         return [
             'purpose' => 'required|string|min:10|max:1000',
-            'needed_date' => 'required|date|after_or_equal:request_date',
+            'needed_date' => 'required|date|after_or_equal:today',
             'remarks' => 'nullable|string|max:1000',
 
             // Validasi untuk item-item yang diajukan
@@ -119,6 +125,10 @@ class CreateAssetRequestForm extends Component
     }
     public function submitRequest()
     {
+        if ($this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', Auth::user())) {
+            $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $this->workflowWarning]);
+            return;
+        }
         $validatedData = $this->validate();
 
         try {
@@ -155,7 +165,7 @@ class CreateAssetRequestForm extends Component
                 //     'ba_budget_outside_path' => $this->ba_budget_outside_path,
                 //     'ba_budget_outside_name' => $this->ba_budget_outside_name,
                 // ]);
-                $request = new AssetRequest([
+                $request = AssetRequest::create([
                     'request_number' => $this->generateRequestNumber(),
                     'requester_user_id' => $requester->id,
                     'jobsite_id' => $requester->jobsite_id,
@@ -169,21 +179,7 @@ class CreateAssetRequestForm extends Component
                     'ba_budget_outside_name' => $this->ba_budget_outside_name,
                 ]);
 
-                $draftData = [
-                    'type' => 'SUBMIT',
-                    'author' => $request->requester->name,
-                    'draft' => $request
-                ];
-                // dd($requester->karyawans->Email);
-                if($requester && $requester->karyawans->Email){
-                    $isRequesterSuccess = Mail::Mailer('smtp2')->to($requester->karyawans->Email)->send(new MailAssetRequest($draftData));
-                }
-
-                // 2. Simpan item detail
-                foreach ($validatedData['items'] as $itemData) {
-                   dd( $itemData);
-                    $request->items()->create($itemData);
-                }
+                // 2. Simpan item detail (dipecah per unit: quantity N -> N baris dengan quantity 1)
                 foreach ($validatedData['items'] as $itemData) {
 
                     $qty = (int) $itemData['quantity']; // jumlah yang diajukan
@@ -198,136 +194,46 @@ class CreateAssetRequestForm extends Component
                         ));
                     }
                 }
-                // 3. Workflow approval
-                $workflow = findWorkflowForContext('REQUEST_ASSET', $requester->position_id, $requester->jobsite_id);
-                if (!$workflow || $workflow->steps->isEmpty()) {
-                    throw new \Exception('Alur persetujuan belum didefinisikan. Hubungi Administrator.');
-                }
-
-                foreach ($workflow->steps as $step) {
-                    $approverPosition = $step->approverPositionLevel;
-                    $approverDepartment = $step->department_id;
-
-                    $roleName = $approverPosition->name;
-
-                    // Logging step info
-                    Log::info('AssetRequest Approval Step', [
-                        'step_id' => $step->id,
-                        'step_order' => $step->step_order,
-                        'roleName' => $roleName,
-                        'approverDepartment' => $approverDepartment,
-                        'user_id' => $step->user_id,
-                    ]);
-
-                    // Skip Project Manager if jobsite is SMD or JKT
-                    if ($roleName === 'Kepala Proyek' && in_array($requester->jobsite->code, ['SMD', 'JKT'])) {
-                        Log::info('Skipping Kepala Proyek for SMD/JKT', [
-                            'jobsite_code' => $requester->jobsite->code,
-                            'roleName' => $roleName,
-                        ]);
-                        continue;
-                    }
-
-                    // Base query
-                    $userQuery = User::query();
-                    if ($step->user_id) {
-                        $userQuery->where('id', $step->user_id);
-                        $approverUser = $userQuery->first();
-                        if ($approverUser) {
-                            $request->approvals()->create([
-                                'step_order' => $step->step_order,
-                                'approver_role_name' => $roleName,
-                                'approver_user_id' => $approverUser->id,
-                                'status' => 'Pending',
-                            ]);
-                            Log::info('Approval created', [
-                                'step_id' => $step->id,
-                                'approver_user_id' => $approverUser->id,
-                                'roleName' => $roleName,
-                            ]);
-                            continue;
-                        } else {
-                            Log::error("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.", [
-                                'step_id' => $step->id,
-                                'roleName' => $roleName,
-                            ]);
-                            throw new \Exception("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.");
-                        }
-
-                    }
-                    if (!empty($approverDepartment)) {
-
-                        $userQuery->where('department_id', $approverDepartment)
-                            ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                            ->where('jobsite_id', $requester->jobsite_id);
-                    } else {
-                        $userQuery
-                            ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                            ->where('jobsite_id', $requester->jobsite_id);
-                    }
-
-                    $approverUser = $userQuery->first();
-
-                    Log::info('ApproverUser after main query', [
-                        'step_id' => $step->id,
-                        'approverUser' => $approverUser ? $approverUser->name : null,
-                    ]);
-
-                    if (!$approverUser) {
-                        $fallbackQuery = User::query();
-                        if (!empty($approverDepartment)) {
-                            $fallbackQuery->where('department_id', $approverDepartment)
-                                ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                                ->whereHas('jobsite', fn($q) => $q->where('code', 'JKT'));
-                        } else {
-                            $fallbackQuery
-                                ->whereHas('positionLevel', fn($q) => $q->where('name', $roleName))
-                                ->whereHas('jobsite', fn($q) => $q->where('code', 'JKT'));
-                        }
-
-
-                        $approverUser = $fallbackQuery->first();
-
-                        Log::info('ApproverUser after fallback query', [
-                            'step_id' => $step->id,
-                            'approverUser' => $approverUser ? $approverUser->name : null,
-                        ]);
-                    }
-
-                    if ($approverUser) {
-                        $request->approvals()->create([
-                            'step_order' => $step->step_order,
-                            'approver_role_name' => $roleName,
-                            'approver_user_id' => $approverUser->id,
-                            'status' => 'Pending',
-                        ]);
-                        Log::info('Approval created', [
-                            'step_id' => $step->id,
-                            'approver_user_id' => $approverUser->id,
-                            'roleName' => $roleName,
-                        ]);
-                    } else {
-                        Log::error("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.", [
-                            'step_id' => $step->id,
-                            'roleName' => $roleName,
-                        ]);
-                        throw new \Exception("Konfigurasi error: Approver untuk jabatan '{$roleName}' tidak dapat ditemukan. Pengajuan dibatalkan.");
-                    }
-                }
+                // 3. Workflow approval. Workflow belum diatur / approver tidak lengkap ->
+                //    WorkflowNotConfigured dan seluruh pengajuan di-rollback (tidak ada yang lolos tanpa approver).
+                $plan = \App\Support\Workflow::plan('REQUEST_ASSET', $requester->position_id, $requester->jobsite_id);
+                // Tahap yang approvernya = pemohon langsung disetujui otomatis.
+                $request->approvals()->createMany(\App\Support\Workflow::approvalRows($plan, $requester->id));
 
                 return $request;
             });
 
-            // 4. Kirim notifikasi ke approver pertama
-            $firstApprover = $assetRequest->approvals()->where('step_order', 1)->first();
+            // 4. Email ke requester (setelah data benar-benar tersimpan)
+            $requester = Auth::user();
+            $requesterEmail = $requester->karyawans->Email ?? null;
+            if ($requesterEmail) {
+                try {
+                    Mail::Mailer('smtp2')->to($requesterEmail)->send(new MailAssetRequest([
+                        'type' => 'SUBMIT',
+                        'author' => $requester->name,
+                        'draft' => $assetRequest,
+                    ]));
+                } catch (\Throwable $mailError) {
+                    Log::error('Gagal kirim email SUBMIT pengajuan aset: ' . $mailError->getMessage());
+                }
+            }
+
+            // 5. Kirim notifikasi ke approver pertama
+            // Approver pertama yang masih harus bertindak (tahap otomatis dilewati).
+            $firstApprover = $assetRequest->approvals()->where('status', 'Pending')->get()->sortBy('step_order')->first();
             if ($firstApprover && $firstApprover->approver) {
                  $approverData = [
                     'type' => 'OUTSTANDING_APPROVER',
                     'approver' => $firstApprover->approver->name,
                     'draft' => $firstApprover
                 ];
-                if($firstApprover && $firstApprover->approver->karyawans->Email){
-                    $isApproverSuccess = Mail::Mailer('smtp2')->to($firstApprover->approver->karyawans->Email)->send(new MailAssetRequest($approverData));
+                $approverEmail = $firstApprover->approver->karyawans->Email ?? null;
+                if ($approverEmail) {
+                    try {
+                        Mail::Mailer('smtp2')->to($approverEmail)->send(new MailAssetRequest($approverData));
+                    } catch (\Throwable $mailError) {
+                        Log::error('Gagal kirim email approver pengajuan aset: ' . $mailError->getMessage());
+                    }
                 }
             }
 
@@ -336,6 +242,13 @@ class CreateAssetRequestForm extends Component
                 ->with('message', 'Pengajuan aset berhasil dibuat dan sedang menunggu persetujuan.');
 
         } catch (\Exception $e) {
+            // Pengajuan gagal: hapus file yang sudah terlanjur diupload.
+            foreach ([$this->ba_damage_path, $this->ba_budget_outside_path] as $uploaded) {
+                if ($uploaded) {
+                    Storage::disk('public')->delete($uploaded);
+                }
+            }
+            Log::error('Gagal membuat pengajuan aset: ' . $e->getMessage());
             session()->flash('error', $e->getMessage());
         }
     }
@@ -448,7 +361,10 @@ class CreateAssetRequestForm extends Component
                     'approver' => $approval->approver,
                     'draft' => $approval
                 ];
-                $isApproverSuccess = Mail::Mailer('smtp2')->to("arrachmansandry@gmail.com")->send(new MailRequest($approverData));
+                $approverEmail = $approval->approver->karyawans->Email ?? null;
+                if ($approverEmail) {
+                    Mail::Mailer('smtp2')->to($approverEmail)->send(new MailRequest($approverData));
+                }
 
                 $draftData = [
                     'type' => 'SUBMIT',
@@ -456,7 +372,10 @@ class CreateAssetRequestForm extends Component
                     'draft' => $approval
                 ];
                 // dd($user,$data);
-                $isRequesterSuccess = Mail::Mailer('smtp2')->to("arrachmansandry@gmail.com")->send(new MailRequest($draftData));
+                $requesterEmail = $approval->assetRequest->requester->karyawans->Email ?? null;
+                if ($requesterEmail) {
+                    Mail::Mailer('smtp2')->to($requesterEmail)->send(new MailRequest($draftData));
+                }
 
                 // Mail::to($approval->approver->karyawans)->send(new MailRequest($draftData));
                 // Panggil helper global
@@ -496,6 +415,40 @@ class CreateAssetRequestForm extends Component
 
     public function render()
     {
-        return view('livewire.asset-requests.create-asset-request-form');
+        $user = Auth::user()->loadMissing(['position.assetStandards.assetType:id,name', 'position.assetStandards.assetSeries:id,name', 'jobsite:id,code,name']);
+
+        // Katalog hanya yang relevan dengan pilihan saat ini.
+        $typeIds = collect($this->items)->pluck('asset_type_id')->filter()->unique();
+        $brandIds = collect($this->items)->pluck('asset_brand_id')->filter()->unique();
+        $catalog = [
+            'types' => AssetType::orderBy('name')->get(['id', 'name']),
+            'brands' => $typeIds->isEmpty() ? collect() : AssetBrand::whereIn('asset_type_id', $typeIds)->orderBy('name')->get(['id', 'name', 'asset_type_id']),
+            'series' => $brandIds->isEmpty() ? collect() : AssetSeries::whereIn('asset_brand_id', $brandIds)->orderBy('name')->get(['id', 'name', 'asset_brand_id', 'specifications']),
+        ];
+
+        // Alur persetujuan yang akan dipakai (pratinjau untuk pemohon).
+        $approvalPreview = [];
+        try {
+            $approvalPreview = \App\Support\Workflow::plan('REQUEST_ASSET', $user->position_id, $user->jobsite_id);
+        } catch (\App\Support\WorkflowNotConfigured $e) {
+            // Pesan sudah ditampilkan lewat $workflowWarning.
+        }
+
+        // Standar aset jabatan & yang sudah dipegang (untuk penjelasan).
+        $heldSeriesIds = Asset::where('holder_user_id', $user->id)->whereNotNull('asset_series_id')->pluck('asset_series_id')->unique()->all();
+        $standards = ($user->position?->assetStandards ?? collect())->map(fn ($st) => [
+            'label' => trim(($st->assetType->name ?? '-') . ' ' . ($st->assetSeries->name ?? '')),
+            'quantity' => $st->quantity,
+            'fulfilled' => $st->asset_series_id && in_array($st->asset_series_id, $heldSeriesIds),
+        ]);
+
+        return view('livewire.asset-requests.create-asset-request-form', [
+            'catalog' => $catalog,
+            'approvalPreview' => $approvalPreview,
+            'standards' => $standards,
+            'totalUnits' => collect($this->items)->sum(fn ($i) => max(0, (int) ($i['quantity'] ?? 0))),
+            'hasJobdesc' => !empty($user->position?->job_description_name),
+            'user' => $user,
+        ]);
     }
 }

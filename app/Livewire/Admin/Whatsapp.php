@@ -39,11 +39,11 @@ class Whatsapp extends Component
     {
         $this->isLoading = true;
         $this->errorMessage = '';
-        $webhookUrl = 'https://ainya.binasaranasukses.co.id/webhook/e49c33da-5c58-486d-9b7c-5fd35223a3ec';
+        $webhookUrl = config('services.ainya.whatsapp_webhook_url');
 
         try {
             // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
-            $response = Http::withoutVerifying()->timeout(60)->get($webhookUrl);
+            $response = Http::timeout(60)->get($webhookUrl);
 
             if ($response->successful()) {
                 $data = $response->json();

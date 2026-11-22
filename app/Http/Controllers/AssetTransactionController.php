@@ -9,6 +9,8 @@ class AssetTransactionController extends Controller
 {
     public function print(AssetTransaction $transaction)
     {
+        $this->authorize('view-asset-transaction', $transaction);
+
         // Eager load semua relasi yang dibutuhkan untuk dokumen cetak
         $transaction->load([
             'items.asset.assetType',

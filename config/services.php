@@ -27,6 +27,25 @@ return [
         'url' => env('LOGINWA_API_URL'),
         'number' => env('LOGINWA_NUMBER'),
         'key' => env('LOGINWA_PRIVATE_KEY'),
+        'verify_ssl' => (bool) env('LOGINWA_VERIFY_SSL', true),
+    ],
+
+    'fortigate' => [
+        'url' => env('FORTIGATE_API_URL', 'https://192.168.4.1:8443/api/v2'),
+        'token' => env('FORTIGATE_API_TOKEN'),
+        // Fortigate di jaringan internal biasanya memakai sertifikat self-signed.
+        'verify_ssl' => (bool) env('FORTIGATE_VERIFY_SSL', false),
+    ],
+
+    'ainya' => [
+        'whatsapp_webhook_url' => env('AINYA_WHATSAPP_WEBHOOK_URL'),
+        'isr_billing_url' => env('AINYA_ISR_BILLING_URL', 'https://ainya.binasaranasukses.co.id/webhook/api/billingisr'),
+        'isr_invoice_url' => env('AINYA_ISR_INVOICE_URL', 'https://ainya.binasaranasukses.co.id/webhook/api/detailInvoice'),
+    ],
+
+    'n8n' => [
+        'webhook_url' => env('N8N_WEBHOOK_URL'),
+        'secret_token' => env('N8N_SECRET_TOKEN'),
     ],
     'resend' => [
         'key' => env('RESEND_KEY'),

@@ -2,49 +2,55 @@
 
 namespace App\Livewire\Modal\Asset;
 
-use Livewire\Component;
 use App\Models\Asset;
 use App\Models\AssetTransaction;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Livewire\Component;
 
 class Pengembalian extends Component
 {
+    /** Status aset yang boleh dikembalikan. */
+    public const RETURNABLE_STATUSES = ['Used', 'Pre-Used'];
+
     public $isModalOpen = false;
     public ?Asset $assetToReturn = null;
     public $returnCondition = '';
     public $returnNotes = '';
 
-    // Listener untuk "mendengar" event dari komponen lain
     protected $listeners = ['openReturnModal' => 'loadAssetToReturn'];
 
     /**
-     * Method ini dipanggil oleh event 'openReturnModal'.
-     * Ia akan memuat data aset dan membuka modal.
+     * Pengelola aset (IT / Master Asset) boleh mengembalikan aset siapa pun,
+     * user biasa hanya aset yang dipegangnya sendiri.
      */
+    protected function canReturn(Asset $asset): bool
+    {
+        $user = Auth::user();
+
+        return $user->isItStaff()
+            || $user->can('Master Asset')
+            || (int) $asset->holder_user_id === $user->id;
+    }
+
     public function loadAssetToReturn($assetId)
     {
-        if(Auth::user()->department->code === 'IT'){
-            $this->assetToReturn = Asset::where('id', $assetId)
-                                    ->first();
-        }else{
-            $this->assetToReturn = Asset::where('id', $assetId)
-                                    ->where('holder_user_id', Auth::id())
-                                    ->first();
+        $asset = Asset::with(['holder:id,name', 'assetType:id,name', 'assetBrand:id,name', 'assetSeries:id,name'])->find($assetId);
+
+        if (!$asset || !$this->canReturn($asset)) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset tidak ditemukan atau Anda tidak berhak mengembalikannya.']);
+            return;
         }
-        
-        
-        if ($this->assetToReturn) {
-            $this->reset(['returnCondition', 'returnNotes']);
-            $this->resetValidation();
-            $this->isModalOpen = true; // Buka modal
-        } else {
-            // Jika aset tidak ditemukan, kirim notifikasi toast
-            $this->dispatch('show-toast', [
-                'type' => 'error', 
-                'message' => 'Aset tidak ditemukan atau Anda tidak berhak mengembalikannya.'
-            ]);
+        if (!in_array($asset->status, self::RETURNABLE_STATUSES, true) || !$asset->holder_user_id) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => "Aset {$asset->asset_number} berstatus {$asset->status} dan tidak sedang dipegang user, jadi tidak bisa dikembalikan."]);
+            return;
         }
+
+        $this->assetToReturn = $asset;
+        $this->reset(['returnCondition', 'returnNotes']);
+        $this->resetValidation();
+        $this->isModalOpen = true;
     }
 
     public function closeModal()
@@ -53,9 +59,6 @@ class Pengembalian extends Component
         $this->assetToReturn = null;
     }
 
-    /**
-     * Memproses pengembalian aset.
-     */
     public function submitReturn()
     {
         if (!$this->assetToReturn) {
@@ -69,50 +72,55 @@ class Pengembalian extends Component
             'returnCondition.required' => 'Kondisi aset saat pengembalian wajib diisi.',
         ]);
 
-        DB::transaction(function () {
-            $user = $this->assetToReturn->holder()->first();
-
-            // 1. Buat record transaksi pengembalian
-            $returnTransaction = AssetTransaction::create([
-                'transaction_number' => $this->generateTransactionNumber('RTN'),
-                'transaction_type' => 'RETURN',
-                'transaction_date' => now(),
-                'from_user_id' => $user->id,
-                'to_jobsite_id' => $this->assetToReturn->jobsite_id,
-                'notes' => "Pengembalian aset {$this->assetToReturn->asset_number} oleh {$user->name}",
-                'status' => 'Pending Inspection',
-                'created_by_user_id' => Auth::id(),
-            ]);
-
-            // 2. Tambahkan item ke transaksi
-            $returnTransaction->items()->create([
-                'asset_id' => $this->assetToReturn->id,
-                'condition_notes' => "Kondisi: {$this->returnCondition}. Catatan: {$this->returnNotes}",
-            ]);
-
-            // 3. Update status aset utama
-            $this->assetToReturn->update([
-                'status' => 'Pending Inspection',
-            ]);
-        });
-
-        // Kirim event ke parent component untuk me-refresh daftar asetnya
-        $this->dispatch('refreshMyAssets');
-        
-        session()->flash('message', "Aset {$this->assetToReturn->asset_number} berhasil diajukan untuk pengembalian.");
-        $this->closeModal();
-    }
-    
-    protected function generateTransactionNumber($typePrefix = 'TRX')
-    {
-        $prefix = "{$typePrefix}/" . date('Ym') . "/";
-        $lastTransaction = AssetTransaction::where('transaction_number', 'LIKE', $prefix . '%')->orderBy('id', 'desc')->first();
-        $nextSequence = 1;
-        if ($lastTransaction) {
-            $lastSequence = (int) substr($lastTransaction->transaction_number, -4);
-            $nextSequence = $lastSequence + 1;
+        // Ambil ulang dari database: status bisa berubah sejak modal dibuka.
+        $asset = Asset::with('holder:id,name')->find($this->assetToReturn->id);
+        if (!$asset || !$this->canReturn($asset) || !in_array($asset->status, self::RETURNABLE_STATUSES, true) || !$asset->holder) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset sudah tidak bisa dikembalikan (status atau pemegang sudah berubah).']);
+            $this->closeModal();
+            $this->dispatch('refreshAssetList');
+            return;
         }
-        return $prefix . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+
+        try {
+            $transaction = DB::transaction(function () use ($asset) {
+                $returnTransaction = AssetTransaction::create([
+                    'transaction_number' => \App\Support\TransactionNumber::next('RTN'),
+                    'transaction_type' => 'RETURN',
+                    'transaction_date' => now(),
+                    'from_user_id' => $asset->holder_user_id,
+                    'from_jobsite_id' => $asset->jobsite_id,
+                    'to_jobsite_id' => $asset->jobsite_id,
+                    'notes' => "Pengembalian aset {$asset->asset_number} oleh {$asset->holder->name}",
+                    'status' => 'Pending Inspection',
+                    'created_by_user_id' => Auth::id(),
+                ]);
+
+                $returnTransaction->items()->create([
+                    'asset_id' => $asset->id,
+                    'condition_notes' => "Kondisi: {$this->returnCondition}. Catatan: {$this->returnNotes}",
+                ]);
+
+                // Simpan tautan ke transaksi pengembalian (dipakai cetak BA pengembalian).
+                $asset->update([
+                    'status' => 'Pending Inspection',
+                    'asset_transaction_return_id' => $returnTransaction->id,
+                ]);
+
+                return $returnTransaction;
+            });
+        } catch (\Throwable $e) {
+            Log::error("Pengembalian aset #{$asset->id} gagal: " . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Pengembalian gagal disimpan. Coba lagi atau hubungi tim IT.']);
+            return;
+        }
+
+        $this->closeModal();
+        $this->dispatch('refreshMyAssets');
+        $this->dispatch('refreshAssetList');
+        $this->dispatch('swal:success', [
+            'title' => 'Berhasil!',
+            'text' => "Aset {$asset->asset_number} diajukan untuk pengembalian ({$transaction->transaction_number}) dan menunggu inspeksi IT.",
+        ]);
     }
 
     public function render()

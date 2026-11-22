@@ -27,7 +27,7 @@ class Main extends Component
     public function Getbilling()
     {
         ini_set('max_execution_time', 300);
-        $response = Http::timeout(120)->withoutVerifying()->post('https://ainya.binasaranasukses.co.id/webhook/api/billingisr', [
+        $response = Http::timeout(120)->post(config('services.ainya.isr_billing_url'), [
             'page' => $this->page,
             'invoice_number' => $this->invoice_number,
         ]);
@@ -41,7 +41,7 @@ class Main extends Component
         $this->invoice_number = $invoice_number;
         $this->isModalOpen = true;
         ini_set('max_execution_time', 300);
-        $response = Http::timeout(120)->withoutVerifying()->post('https://ainya.binasaranasukses.co.id/webhook/api/detailInvoice', [
+        $response = Http::timeout(120)->post(config('services.ainya.isr_invoice_url'), [
             'invoice_number' => $invoice_number,
         ]);
         $result = $response->json();

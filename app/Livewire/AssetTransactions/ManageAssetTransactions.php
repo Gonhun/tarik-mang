@@ -91,13 +91,6 @@ class ManageAssetTransactions extends Component // Ganti nama class jika berbeda
         // $this->condition_notes_per_asset = [];
         $this->loadAvailableAssets();
     }
-    public function submitSelected()
-    {
-        // Misalnya ingin ambil aset terpilih
-        dd('aaa');
-
-        // Lakukan sesuatu, misalnya emit event, update status, dll.
-    }
     public function updatedFilterAssetBrandId($brandId) // Jika Anda ingin filter sampai brand
     {
         // if (!empty($brandId)) {

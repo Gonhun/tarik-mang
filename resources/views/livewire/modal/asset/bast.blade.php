@@ -1,4 +1,10 @@
 <div>
+    {{-- Indikator saat modal sedang dimuat --}}
+    <div wire:loading.flex wire:target="loadInitialData" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center" style="background: rgba(0,0,0,.25); z-index: 1060;">
+        <div class="bg-white rounded shadow px-4 py-3 d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm text-primary" role="status"></span> Memuat...
+        </div>
+    </div>
     @if ($isModalOpen)
         <div id="bastModal" class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
             <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
@@ -94,7 +100,7 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" wire:click="closeModal">Batal</button>
-                            <button type="submit" class="btn btn-primary">
+                            <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="submitBast">
                                 <span wire:loading.remove wire:target="submitBast">Buat BAST</span>
                                 <span wire:loading wire:target="submitBast">Memproses...</span>
                             </button>

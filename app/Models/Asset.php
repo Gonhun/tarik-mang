@@ -92,7 +92,8 @@ class Asset extends Model implements Auditable
     }
     public function departement(): BelongsTo
     {
-        return $this->belongsTo(Department::class);
+        // Kolom di tabel assets bernama department_id (tanpa ini Laravel mencari departement_id).
+        return $this->belongsTo(Department::class, 'department_id');
     }
 
     public function jobsite(): BelongsTo

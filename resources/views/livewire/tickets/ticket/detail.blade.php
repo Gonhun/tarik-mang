@@ -46,9 +46,9 @@
                     {{-- Kategori --}}
                     <div class="col-md-6">
                         <h5>Kategori</h5>
-                        @if (!in_array($ticket->status, ['closed', 'resolved']) && Auth::user()->department_id == 8)
+                        @if (!in_array($ticket->status, ['closed', 'resolved']) && $canManage)
                             <form wire:submit.prevent="updateCategory">
-                                <select class="form-control mb-2" name="ticket_category_id" wire:model="ticket.ticket_category_id" required>
+                                <select class="form-control mb-2" name="ticket_category_id" wire:model.live="categoryId" required>
                                     <option value="">-- Pilih Kategori --</option>
                                     @foreach(\App\Models\TicketCategory::all() as $category)
                                         <option value="{{ $category->id }}">{{ $category->name }}</option>
@@ -57,21 +57,19 @@
                                 <button class="btn btn-sm btn-primary" type="submit">Simpan Kategori</button>
                             </form>
                         @else
-                            <span>{{ optional($ticket->category)->name ?? '-' }}</span>
+                            <span>{{ $ticket->subCategory?->category?->name ?? '-' }}</span>
                         @endif
                     </div>
                     {{-- Sub Kategori --}}
                     <div class="col-md-6">
                         <h5>Sub Kategori</h5>
-                        @if (!in_array($ticket->status, ['closed', 'resolved']) && Auth::user()->department_id == 8)
+                        @if (!in_array($ticket->status, ['closed', 'resolved']) && $canManage)
                             <form wire:submit.prevent="updateSubCategory">
-                                <select class="form-control mb-2" name="ticket_sub_category_id" wire:model="ticket.ticket_sub_category_id" required>
+                                <select class="form-control mb-2" name="ticket_sub_category_id" wire:model="subCategoryId" required>
                                     <option value="">-- Pilih Sub Kategori --</option>
-                                    @if($ticket->ticket_category_id)
-                                        @foreach(\App\Models\TicketSubCategory::where('ticket_category_id', $ticket->ticket_category_id)->get() as $subCategory)
-                                            <option value="{{ $subCategory->id }}">{{ $subCategory->name }}</option>
-                                        @endforeach
-                                    @endif
+                                    @foreach($subCategories as $subCategory)
+                                        <option value="{{ $subCategory->id }}">{{ $subCategory->name }}</option>
+                                    @endforeach
                                 </select>
                                 <button class="btn btn-sm btn-primary" type="submit">Simpan Sub Kategori</button>
                             </form>
@@ -82,10 +80,9 @@
                     
                     <div class="col-md-6">
                         <h5>Prioritas</h5>
-                        @if (is_null($ticket->priority))
-                            <form method="POST" action="#">
-                                @csrf
-                                <select class="form-control mb-2" name="priority" required>
+                        @if ($canManage && !in_array($ticket->status, ['closed', 'resolved']))
+                            <form wire:submit.prevent="updatePriority">
+                                <select class="form-control mb-2" name="priority" wire:model="priority" required>
                                     <option value="">-- Pilih Prioritas --</option>
                                     @foreach($priorities as $key => $label)
                                         <option value="{{ $key }}">{{ $label }}</option>
@@ -100,9 +97,8 @@
                     
                     <div class="col-md-6  mb-2">
                         <h5>Assigned To</h5>
-                        @if (is_null($ticket->assigned_to))
+                        @if (is_null($ticket->assigned_to) && $canManage)
                             <form wire:submit="assigned">
-                                @csrf
                                 <select id="selectAssigned" data-live-search="true" class="form-control mb-2" name="assigned_to" wire:model="assignedId" required>
                                     <option value="">-- Pilih Penanggung Jawab --</option>
                                     @foreach($users as $user)
@@ -159,7 +155,7 @@
                                
                                 <div class="mb-2">
                                     <label for="resolution_note">Catatan Penyelesaian (Resolution Note)</label>
-                                    <textarea id="resolution_note" class="form-control" rows="3" wire:model.defer="ticket.resolution_note" placeholder="Tambahkan catatan penyelesaian jika diperlukan..." {{ $setStatus == 'resolved'? 'required' : '' }} {{ Auth::user()->department_id == 8 ? '' : 'disabled'}} {{ $ticket->status == 'closed' ? 'disabled' : ''}}>{{ $ticket->status }} </textarea>
+                                    <textarea id="resolution_note" class="form-control" rows="3" wire:model="resolutionNote" placeholder="Tambahkan catatan penyelesaian jika diperlukan..." {{ $setStatus == 'resolved'? 'required' : '' }} {{ $canManage ? '' : 'disabled'}} {{ $ticket->status == 'closed' ? 'disabled' : ''}}></textarea>
                                 </div>
                            
                             @if($setStatus !== $ticket->status)
@@ -169,7 +165,7 @@
                         @else
                             <div class="mb-2">
                                 <label for="resolution_note">Catatan Penyelesaian (Resolution Note)</label>
-                                <textarea id="resolution_note" class="form-control" rows="3" wire:model.defer="ticket.resolution_note" placeholder="Tambahkan catatan penyelesaian jika diperlukan..." {{ $setStatus == 'resolved'? 'required' : '' }} {{ Auth::user()->department_id == 8 ? '' : 'disabled'}} {{ $ticket->status == 'closed' ? 'disabled' : ''}}>{{ $ticket->status }} </textarea>
+                                <textarea id="resolution_note" class="form-control" rows="3" wire:model="resolutionNote" placeholder="Tambahkan catatan penyelesaian jika diperlukan..." {{ $setStatus == 'resolved'? 'required' : '' }} {{ $canManage ? '' : 'disabled'}} {{ $ticket->status == 'closed' ? 'disabled' : ''}}></textarea>
                             </div>
                             @if($ticket->status == 'closed' && $ticket->rating == null)
                                 <div class="card mt-3">

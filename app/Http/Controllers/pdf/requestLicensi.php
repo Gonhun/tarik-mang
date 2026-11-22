@@ -12,7 +12,8 @@ class requestLicensi extends Controller
     public function view(int $id)
     {
         $licens = LicenseRequest::with(['user','items','items.approvals','items.approvals.approver.position'])->findOrFail($id);
-       
+        $this->authorize('view-license-request', $licens);
+
         $pdf = Pdf::loadView('pdf.request_licensi', compact('licens'))->setPaper('A4', 'portrait');
         return $pdf->stream("Request-{$licens->nomor}.pdf");
         

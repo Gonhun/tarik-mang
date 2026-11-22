@@ -23,6 +23,9 @@ class ManageWorkflows extends Component
     public $workflow_id, $workflow_name, $workflow_description,$new_step_user_id;
     public $new_step_position_id,$new_step_Department_id;
 
+    /** Site untuk pratinjau approver tiap tahap. */
+    public $previewJobsiteId = '';
+
     public function mount()
     {
         $this->workflows = ApprovalWorkflow::orderBy('name')->get();
@@ -62,7 +65,45 @@ class ManageWorkflows extends Component
     }
     public function selectWorkflow($workflowId)
     {
-        $this->selectedWorkflow = ApprovalWorkflow::with('steps.approverPositionLevel')->find($workflowId);
+        $this->selectedWorkflow = ApprovalWorkflow::with(['steps.approverPositionLevel', 'steps.user', 'steps.department'])->find($workflowId);
+        if ($this->previewJobsiteId === '' ) {
+            $this->previewJobsiteId = (string) (\Illuminate\Support\Facades\Auth::user()->jobsite_id ?? '');
+        }
+    }
+
+    /**
+     * Rapikan nomor tahap menjadi 1..n sesuai urutan sekarang (tidak memengaruhi approval yang sudah dibuat).
+     */
+    protected function renumberSteps(): void
+    {
+        if (!$this->selectedWorkflow) return;
+        $order = 1;
+        foreach (ApprovalWorkflowStep::where('approval_workflow_id', $this->selectedWorkflow->id)->orderBy('step_order')->orderBy('id')->get() as $step) {
+            if ((int) $step->step_order !== $order) {
+                $step->update(['step_order' => $order]);
+            }
+            $order++;
+        }
+    }
+
+    public function moveStep($stepId, $direction)
+    {
+        if (!$this->selectedWorkflow) return;
+        $this->renumberSteps();
+        $step = ApprovalWorkflowStep::where('approval_workflow_id', $this->selectedWorkflow->id)->find($stepId);
+        if (!$step) return;
+        $target = $direction === 'up' ? $step->step_order - 1 : $step->step_order + 1;
+        $other = ApprovalWorkflowStep::where('approval_workflow_id', $this->selectedWorkflow->id)->where('step_order', $target)->first();
+        if ($other) {
+            \Illuminate\Support\Facades\DB::transaction(function () use ($step, $other) {
+                // Ada unique index (workflow, step_order): pakai nomor sementara agar tidak bentrok saat menukar.
+                [$a, $b] = [$step->step_order, $other->step_order];
+                $step->update(['step_order' => 1000 + $step->id]);
+                $other->update(['step_order' => $a]);
+                $step->update(['step_order' => $b]);
+            });
+        }
+        $this->selectWorkflow($this->selectedWorkflow->id);
     }
 
     public function saveWorkflow()
@@ -79,10 +120,13 @@ class ManageWorkflows extends Component
 
     public function addStep()
     {
+        // Tahap harus menunjuk user tertentu ATAU level jabatan (agar approver bisa dicari).
         $this->validate([
-            'new_step_position_id' => 'required|exists:position_levels,id',
+            'new_step_position_id' => 'required_without:new_step_user_id|nullable|exists:position_levels,id',
             'new_step_Department_id' => 'nullable|exists:departments,id',
             'new_step_user_id' => 'nullable|exists:users,id',
+        ], [
+            'new_step_position_id.required_without' => 'Pilih jabatan approver atau user approver.',
         ]);
         if ($this->selectedWorkflow) {
             $lastStepOrder = $this->selectedWorkflow->steps()->max('step_order') ?? 0;
@@ -101,7 +145,9 @@ class ManageWorkflows extends Component
 
     public function removeStep($stepId)
     {
-        ApprovalWorkflowStep::find($stepId)->delete();
+        if (!$this->selectedWorkflow) return;
+        ApprovalWorkflowStep::where('approval_workflow_id', $this->selectedWorkflow->id)->find($stepId)?->delete();
+        $this->renumberSteps();
         $this->selectWorkflow($this->selectedWorkflow->id); // Refresh
     }
     public function deleteWorkflow($workflowId)
@@ -129,6 +175,23 @@ class ManageWorkflows extends Component
     }
     public function render()
     {
-        return view('livewire.approval-workflows.manage-workflows');
+        // Pratinjau: approver yang akan dipakai tiap tahap untuk site terpilih.
+        $preview = [];
+        $usedBy = collect();
+        if ($this->selectedWorkflow) {
+            $jobsiteId = $this->previewJobsiteId !== '' ? (int) $this->previewJobsiteId : null;
+            foreach ($this->selectedWorkflow->steps as $step) {
+                $preview[$step->id] = \App\Support\Workflow::findApprover($step, $jobsiteId);
+            }
+            $usedBy = ApprovalWorkflowAssignment::with(['position:id,name', 'jobsite:id,code,name'])
+                ->where('approval_workflow_id', $this->selectedWorkflow->id)->get();
+        }
+
+        return view('livewire.approval-workflows.manage-workflows', [
+            'preview' => $preview,
+            'usedBy' => $usedBy,
+            'jobsites' => \App\Models\Jobsite::orderBy('code')->get(['id', 'code', 'name']),
+            'typeLabels' => \App\Support\Workflow::LABELS,
+        ]);
     }
 }

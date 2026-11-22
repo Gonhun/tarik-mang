@@ -14,7 +14,7 @@ class TaskCreate extends Component
 
     public function mount()
     {
-        $this->users = \App\Models\User::select('id','name')->where('department_id',8)->where('is_active',1)->orderBy('name')->get();
+        $this->users = \App\Models\User::select('id','name')->where('department_id', config('app.it_department_id'))->where('is_active',1)->orderBy('name')->get();
         $this->assigned_to =Auth::id();
     }
     protected $rules = [

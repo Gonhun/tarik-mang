@@ -22,37 +22,60 @@ class MyAssets extends Component
     {
         $this->resetPage();
     }
+    public function reportLost($assetId)
+    {
+        $this->dispatch('openDisposalModal', ['asset_id' => $assetId, 'mode' => 'LOST']);
+    }
+
     public function openReturnModal($assetId)
     {
         $this->dispatch('openReturnModal', $assetId);
     }
+    /**
+     * Aset milik user yang login dan masih menunggu konfirmasi terima (Pre-Used).
+     */
+    protected function pendingAssetForMe($id): ?Asset
+    {
+        return Asset::with('assetSeries:id,name')
+            ->whereKey($id)
+            ->where('holder_user_id', Auth::id())
+            ->where('status', 'Pre-Used')
+            ->first();
+    }
+
     public function confirmAccept($id)
     {
-        $asset = Asset::find($id);
-        if($asset){
-            $this->dispatch('swal:question', [
-                'id' => $id,
-                'title' => 'Accept Asset?',
-                'text' => 'Apakah anda yankin bahwa Asset '. $asset->assetSeries->name .' sudah anda terima' ,
-                'method' => 'AcceptAssetId'
-            ]);
-            
+        $asset = $this->pendingAssetForMe($id);
+        if (!$asset) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset tidak ditemukan atau tidak menunggu konfirmasi Anda.']);
+            return;
         }
-        
+
+        $this->dispatch('swal:question', [
+            'id' => $id,
+            'title' => 'Terima aset?',
+            'text' => 'Apakah Anda yakin aset ' . $asset->asset_number . ' (' . ($asset->assetSeries->name ?? '-') . ') sudah Anda terima?',
+            'method' => 'AcceptAssetId'
+        ]);
     }
+
     public function AcceptAssetId($id)
     {
-        $asset = Asset::findOrFail($id);
-        $asset->status = 'Used';
-        $asset->save();
+        // Hanya pemegang aset yang boleh mengonfirmasi, dan hanya dari status Pre-Used.
+        $asset = $this->pendingAssetForMe($id);
+        if (!$asset) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset tidak ditemukan atau tidak menunggu konfirmasi Anda.']);
+            return;
+        }
+
+        $asset->update(['status' => 'Used']);
         $this->dispatch('swal:success', [
             'id' => $id,
             'title' => 'Berhasil!',
-            'text' => 'Aset telah diterima.',
+            'text' => 'Aset ' . $asset->asset_number . ' telah diterima.',
         ]);
     }
-    
-   
+
     public function render()
     {
         // Ambil ID user yang sedang login

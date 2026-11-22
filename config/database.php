@@ -58,7 +58,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -78,7 +78,7 @@ return [
             'strict' => true,
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
-                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
+                (PHP_VERSION_ID >= 80500 ? \Pdo\Mysql::ATTR_SSL_CA : \PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
             ]) : [],
         ],
 
@@ -114,11 +114,11 @@ return [
 
         'sqlsrv_hrd' => [
             'driver' => 'sqlsrv',
-            'host' => 'cloud.binasaranasukses.com',
-            'port' => env('DB_PORT', '1433'),
-            'database' => 'HRD',
-            'username' => 'sandev',
-            'password' => 'sandev123',
+            'host' => env('DB_HRD_HOST', 'cloud.binasaranasukses.com'),
+            'port' => env('DB_HRD_PORT', '1433'),
+            'database' => env('DB_HRD_DATABASE', 'HRD'),
+            'username' => env('DB_HRD_USERNAME'),
+            'password' => env('DB_HRD_PASSWORD'),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,

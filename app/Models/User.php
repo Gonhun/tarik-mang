@@ -62,6 +62,14 @@ class User extends Authenticatable implements Auditable
         ];
     }
 
+    /**
+     * Anggota tim IT (department IT, lihat config app.it_department_id).
+     */
+    public function isItStaff(): bool
+    {
+        return (int) $this->department_id === (int) config('app.it_department_id');
+    }
+
     public function isItAdmin(): bool
     {
         // Logika ini memeriksa apakah pengguna memiliki relasi 'position',

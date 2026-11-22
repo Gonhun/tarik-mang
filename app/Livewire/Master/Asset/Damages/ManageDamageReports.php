@@ -2,354 +2,334 @@
 
 namespace App\Livewire\Master\Asset\Damages;
 
-use Livewire\Component;
-use App\Models\AssetDamageReport;
 use App\Models\Asset;
-use App\Models\User;
-use App\Models\AssetStatusLog;
-use App\Models\AssetTransaction;
+use App\Models\AssetDamageReport;
 use App\Models\Jobsite;
+use App\Models\User;
+use App\Support\AssetDisposal;
+use App\Support\WorkflowNotConfigured;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Url;
+use Livewire\Component;
 use Livewire\WithFileUploads;
 use Livewire\WithPagination;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\Rule;
 
+/**
+ * Laporan kerusakan aset.
+ * Aktif (Under Repair / Awaiting Parts) -> aset "Repair".
+ * Closed (selesai diperbaiki) / Cancelled -> aset kembali ke status sebelum laporan.
+ * Beyond Economic Repair -> pengajuan disposal (perlu approval workflow DISPOSED).
+ */
 class ManageDamageReports extends Component
 {
     use WithPagination, WithFileUploads;
 
-    // Properti untuk form modal
-    public $damage_report_id,$assetEdit, $asset_id, $reported_by_user_id, $report_date, $damage_description;
-    public $damage_status, $assessment_notes, $repair_notes, $repair_cost, $repaired_date;
-    public $photo1, $photo2, $other_document;
-    public $existingPhoto1Path, $existingPhoto2Path, $existingOtherDocumentPath, $existingOtherDocumentName;
-    public $from_jobsite_id;
-    // Data untuk dropdown di form
-    public $assetsForSelection = [];
-    public $usersForReporter = [];
-    public $allJobsites = [];
-    public $selected_assets = [];
+    /** Nilai yang diizinkan database (CHECK constraint) dan ditampilkan di form. */
+    public const STATUSES = [
+        'Under Repair' => ['Sedang diperbaiki', 'warning'],
+        'Awaiting Parts' => ['Menunggu suku cadang', 'info'],
+        'Closed' => ['Selesai diperbaiki', 'success'],
+        'Beyond Economic Repair' => ['Rusak berat → disposal', 'danger'],
+        'Cancelled' => ['Dibatalkan', 'secondary'],
+    ];
+    public const OPEN_STATUSES = ['Reported', 'PendingAssessment', 'Under Repair', 'Awaiting Parts', 'AwaitingParts'];
+    public const FINAL_STATUSES = ['Closed', 'Cancelled', 'Beyond Economic Repair', 'BeyondEconomicRepair', 'RepairComplete'];
 
-    public $filteredAssets = [];
-    public $searchAsset = '';
-    // Properti UI
-    public $isEdit = false;
-    public $isModalOpen = false;
-    public $search = '';
+    /** Status aset yang boleh dilaporkan rusak. */
+    public const REPORTABLE_ASSET_STATUSES = ['Free', 'Used', 'Pre-Used', 'Repair', 'Demage'];
+
     protected $paginationTheme = 'bootstrap';
 
-    // Daftar status untuk dropdown
-    //'Reported', 'Pending Assessment', 'Assessment Complete',  'Repair Complete', 
-    public $damageStatuses = [
-        'Under Repair','Awaiting Parts', 'Beyond Economic Repair', 'Closed', 'Cancelled'
-    ];
+    // Filter daftar
+    #[Url(as: 'q')]
+    public $search = '';
+    #[Url(as: 'status')]
+    public $statusFilter = 'open';
 
-    public function mount()
-    {
-        $this->allJobsites = Jobsite::orderBy('name')->get(['id', 'name']);
-        $this->usersForReporter = User::orderBy('name')->get(['id', 'name']);
-    }
-    public function updatedFromJobsiteId($jobsiteId)
-    {
-       
-        $this->changeFromJobsiteId($jobsiteId);
-    }
-    public function updatedSearchAsset()
-    {
-        // Jika jobsite sudah dipilih, panggil ulang fungsi
-        $this->filterAssets();
-    }
-    public function changeFromJobsiteId($jobsiteId)
-    {
-        $this->filteredAssets = [];
-        if (!empty($jobsiteId)) {
-            $this->assetsForSelection = Asset::where('jobsite_id', $jobsiteId)
-                ->whereNotIn('status', ['Disposed', 'Missing'])
-                ->get()
-                ->toArray();
-        } else {
-            $this->assetsForSelection = [];
-        }
-    
-        $this->filterAssets();
-    }
-    public function filterAssets()
-    {
-        $search = strtolower($this->searchAsset ?? '');
+    // Form
+    public $isModalOpen = false;
+    public $damage_report_id = null;
+    public $from_jobsite_id = '';
+    public $asset_id = null;
+    public $searchAsset = '';
+    public $reported_by_user_id;
+    public $reporterSearch = '';
+    public $report_date;
+    public $damage_description = '';
+    public $damage_status = 'Under Repair';
+    public $assessment_notes, $repair_notes, $repair_cost, $repaired_date;
+    public $photo1, $photo2, $other_document;
+    public $existingPhoto1Path, $existingPhoto2Path, $existingOtherDocumentPath, $existingOtherDocumentName;
 
-        // Jika pencarian kosong, tampilkan semua aset
-        if ($search === '') {
-            $this->filteredAssets = $this->assetsForSelection;
-            return;
-        }
+    public function updatingSearch() { $this->resetPage(); }
+    public function updatingStatusFilter() { $this->resetPage(); }
 
-        // Filter data tanpa mengubah selected_assets
-        $this->filteredAssets = collect($this->assetsForSelection)
-            ->filter(function ($asset) use ($search) {
-                return str_contains(strtolower($asset['asset_number']), $search)
-                    || str_contains(strtolower($asset['serial_number']), $search)
-                    || str_contains(strtolower($asset['asset_series']['name'] ?? ''), $search)
-                    || str_contains(strtolower($asset['asset_series']['material_code']['name'] ?? ''), $search);
-            })
-            ->values()
-            ->toArray();
+    public function updatedFromJobsiteId()
+    {
+        $this->asset_id = null;
+        $this->searchAsset = '';
     }
+
+    public function chooseReporter($userId)
+    {
+        $this->reported_by_user_id = (int) $userId;
+        $this->reporterSearch = '';
+    }
+
     protected function rules()
     {
         return [
             'asset_id' => 'required|exists:assets,id',
             'reported_by_user_id' => 'required|exists:users,id',
-            'report_date' => 'required|date',
-            'damage_description' => 'required|string|min:10',
-            'damage_status' => ['required', Rule::in($this->damageStatuses)],
-            'assessment_notes' => 'nullable|string',
-            'repair_notes' => 'nullable|string',
+            'report_date' => 'required|date|before_or_equal:today',
+            'damage_description' => 'required|string|min:10|max:2000',
+            'damage_status' => ['required', Rule::in(array_keys(self::STATUSES))],
+            'assessment_notes' => 'nullable|string|max:2000',
+            'repair_notes' => ($this->damage_status === 'Closed' ? 'required' : 'nullable') . '|string|max:2000',
             'repair_cost' => 'nullable|numeric|min:0',
-            'repaired_date' => 'nullable|date|after_or_equal:report_date',
-            'photo1' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5120',
-            'photo2' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5120',
-            'other_document' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,png|max:5120',
+            'repaired_date' => ($this->damage_status === 'Closed' ? 'required' : 'nullable') . '|date|after_or_equal:report_date',
+            'photo1' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'photo2' => 'nullable|file|mimes:jpg,jpeg,png,pdf|max:5120',
+            'other_document' => 'nullable|file|mimes:pdf,doc,docx,xls,xlsx,jpg,jpeg,png|max:5120',
         ];
     }
-    public function render()
-    {
-        $query = AssetDamageReport::with(['asset:id,asset_number,serial_number', 'reporter:id,name']);
 
-        if (!empty($this->search)) {
-            $searchTerm = '%' . $this->search . '%';
-            $query->where(function ($q) use ($searchTerm) {
-                $q->where('damage_description', 'like', $searchTerm)
-                  ->orWhereHas('asset', fn($sq) => $sq->where('asset_number', 'like', $searchTerm)
-                                                    ->orWhere('serial_number', 'like', $searchTerm))
-                  ->orWhereHas('reporter', fn($sq) => $sq->where('name', 'like', $searchTerm));
-            });
-        }
-
-        $damageReports = $query->orderBy('report_date', 'desc')->orderBy('id', 'desc')->paginate(10);
-        return view('livewire.master.asset.damages.manage-damage-reports',[
-            'damageReports' => $damageReports,
-        ]);
-    }
-    private function storeFile($fileProperty, $existingPathProperty, $folderName)
+    protected function messages()
     {
-        if ($this->$fileProperty) {
-            if ($this->damage_report_id && $this->$existingPathProperty) {
-                Storage::disk('public')->delete($this->$existingPathProperty);
-            }
-            $recordId = $this->damage_report_id ?? 'new';
-            return $this->$fileProperty->store("asset_damage_files/{$recordId}/{$folderName}", 'public');
-        }
-        return $this->$existingPathProperty;
+        return [
+            'asset_id.required' => 'Pilih aset yang rusak.',
+            'damage_description.min' => 'Deskripsi kerusakan minimal 10 karakter.',
+            'repair_notes.required' => 'Catatan perbaikan wajib diisi saat laporan ditutup.',
+            'repaired_date.required' => 'Tanggal selesai perbaikan wajib diisi saat laporan ditutup.',
+            'report_date.before_or_equal' => 'Tanggal lapor tidak boleh di masa depan.',
+        ];
     }
 
     public function create()
     {
-        $this->resetInputFields();
-        $this->damage_status = 'Reported';
-        $this->report_date = now()->format('Y-m-d');
+        $this->resetForm();
+        $this->from_jobsite_id = (string) (Auth::user()->jobsite_id ?? '');
         $this->reported_by_user_id = Auth::id();
-        $this->openModal();
+        $this->report_date = now()->format('Y-m-d');
+        $this->isModalOpen = true;
     }
 
-    public function store()
-    {
-       
-        $validatedData = $this->validate();
-        
-        DB::transaction(function () use ($validatedData) {
-           
-            $dataToStore = [
-                'asset_id' => $this->asset_id,
-                'reported_by_user_id' => $this->reported_by_user_id,
-                'report_date' => $this->report_date,
-                'damage_description' => $this->damage_description,
-                'damage_status' => $this->damage_status,
-                'assessment_notes' => $this->assessment_notes,
-                'repair_notes' => $this->repair_notes,
-                'repair_cost' => $this->repair_cost,
-                'repaired_date' => $this->repaired_date,
-                'updated_by_user_id' => Auth::id(),
-            ];
-
-            if (!$this->damage_report_id) {
-                $dataToStore['created_by_user_id'] = Auth::id();
-            }
-           
-            $damageReport = AssetDamageReport::updateOrCreate(['id' => $this->damage_report_id], $dataToStore);
-            // perbaiki: in_array membutuhkan dua argumen, perbaiki sintaksnya atau hapus jika tidak diperlukan
-            // Jika ingin melakukan sesuatu jika damage_status TIDAK salah satu dari status berikut:
-            // Perbaikan logika update status aset berdasarkan status laporan kerusakan
-           
-            // Jika status bukan 'Beyond Economic Repair', 'Closed', atau 'Cancelled', set status aset ke 'Repair'
-            if (!in_array($this->damage_status, ['Beyond Economic Repair', 'Closed', 'Cancelled'])) {
-                Asset::where('id', $this->asset_id)->update(['status' => 'Repair']);
-                
-            }
-
-            // Jika status 'Closed' atau 'Cancelled', cek apakah aset punya holder
-            if (in_array($this->damage_status, ['Closed', 'Cancelled'])) {
-                $asset = Asset::find($this->asset_id);
-                    if ($asset && $asset->holder_user_id) {
-                        Asset::where('id', $this->asset_id)->update(['status' => 'Used']);
-                    } else {
-                        Asset::where('id', $this->asset_id)->update(['status' => 'Free']);
-                    }
-            }
-
-            // Jika status 'Beyond Economic Repair', set status aset ke 'Pre-Disposed'
-            if ($this->damage_status === 'Beyond Economic Repair') {
-                Asset::where('id', $this->asset_id)->update(['status' => 'Pre-Disposed']);
-            }
-            // Handle file uploads
-            $updatePaths = [];
-            if ($this->photo1) $updatePaths['photo1_path'] = $this->storeFile('photo1', 'existingPhoto1Path', 'photos');
-            if ($this->photo2) $updatePaths['photo2_path'] = $this->storeFile('photo2', 'existingPhoto2Path', 'photos');
-            if ($this->other_document) {
-                 $updatePaths['other_document_path'] = $this->storeFile('other_document', 'existingOtherDocumentPath', 'documents');
-                 $updatePaths['other_document_name'] = $this->other_document->getClientOriginalName();
-            }
-            if(!empty($updatePaths)) $damageReport->update($updatePaths);
-
-            // Update status aset utama berdasarkan status laporan kerusakan
-            $this->updateMainAssetStatus($damageReport);
-        });
-
-        session()->flash('message', $this->damage_report_id ? 'Laporan Kerusakan berhasil diperbarui.' : 'Laporan Kerusakan berhasil dibuat.');
-        $this->closeModal();
-    }
-    
-    protected function updateMainAssetStatus(AssetDamageReport $report)
-    {
-        $asset = $report->asset;
-       
-        if (!$asset) return;
-
-        $previousAssetStatus = $asset->status;
-        $newAssetStatus = $asset->status;
-
-        if (in_array($report->damage_status, ['Reported', 'Pending Assessment', 'Under Repair', 'Awaiting Parts'])) {
-            $newAssetStatus = 'Repair';
-        } elseif ($report->damage_status === 'Beyond Economic Repair') {
-            $newAssetStatus = 'Pre Disposed'; // Atau status khusus 'Beyond Repair'
-            $this->generateTransaction($report);
-        } elseif ($report->damage_status === 'Repair Complete' || $report->damage_status === 'Closed') {
-            // Kembalikan ke 'Free' jika sudah diperbaiki atau kasus ditutup
-            $newAssetStatus = 'Free';
-        }
-
-        if ($asset->status !== $newAssetStatus) {
-            $asset->update(['status' => $newAssetStatus]);
-           
-        }
-    }
-    protected function generateTransaction(AssetDamageReport $report)
-    {
-        $asset = $report->asset;
-        $user =Auth::user();
-        $transactionNumber=generateMutationNumber('DPS');
-        $transaction = AssetTransaction::create([
-            'transaction_number' => $transactionNumber,
-            'transaction_type' => 'DISPOSED',
-            'transaction_date' => now(),
-            'from_user_id' => $asset->holder_user_id,
-            'notes' => 'Transaksi disposal otomatis dari laporan kerusakan #'.$report->id,
-            'status' => 'Pending Approval', // Status awal disposal
-            'created_by_user_id' => $user ? $user->id : null,
-        ]);
-        
-        // Tambahkan item ke transaksi disposal
-        $transaction->items()->create([
-            'asset_id' => $asset->id,
-            'condition_notes' => 'Aset didispose karena kerusakan berat. Laporan kerusakan #'.$report->id,
-        ]);
-        $this->generateMutationApprovalSteps($transaction);        
-    }
-
-    protected function generateMutationApprovalSteps(AssetTransaction $transaction)
-    {
-        $workflow = findWorkflowForContext('DISPOSED', $transaction->position_id, $transaction->jobsite_id);
-        if (!$workflow || $workflow->steps->isEmpty()) {
-            throw new \Exception('Alur persetujuan belum didefinisikan. Hubungi Administrator.');
-        }
-        foreach ($workflow->steps as $step) {
-            $approverPosition = $step->approverPositionLevel;
-            $approverDepartment = $step->department_id;
-            $roleName = $approverPosition->name;
-            $transaction->approvals()->create([
-                'step_order' => $step->step_order,
-                'approver_role_name' => $roleName,
-                'approver_user_id' => $approverUser->id ?? null, // Fallback jika tidak ditemukan
-                'status' => 'Pending',
-            ]);
-        }
-        $transaction->status = $transaction->approvals()->first()->approver_role_name; // Sesuaikan dengan enum Anda
-        $transaction->save();
-
-        
-        // if ($kasiItUser) {
-        //     $number = $kasiItUser->whatsapp;
-        //     $msg = "Terdapat permintaan persetujuan untuk penghapusan aset. Silakan cek dan lakukan persetujuan pada sistem.";
-        //     $success = sendMessageWithWhatsApp($number,$msg);
-        //     if($success)
-        //     {
-        //         $this->dispatch('swal:success', [
-        //             'title' => 'Berhasil!',
-        //             'text' => 'Pesan di kirim ke '. $kasiItUser->name .' 🙏',
-        //         ]);
-        //     }
-        // }
-    }
     public function edit($id)
     {
-        $report = AssetDamageReport::findOrFail($id);
-        $this->damage_report_id = $id;
-        $this->asset_id = $report->asset->id;
-        $this->assetEdit = $report->asset;
+        $report = AssetDamageReport::with('asset')->findOrFail($id);
+        if (in_array($report->damage_status, self::FINAL_STATUSES, true)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa diubah', 'text' => "Laporan ini sudah berstatus {$report->damage_status}."]);
+            return;
+        }
+
+        $this->resetForm();
+        $this->damage_report_id = $report->id;
+        $this->asset_id = $report->asset_id;
+        $this->from_jobsite_id = (string) ($report->asset->jobsite_id ?? '');
         $this->reported_by_user_id = $report->reported_by_user_id;
-        $this->report_date = $report->report_date->format('Y-m-d');
+        $this->report_date = optional($report->report_date)->format('Y-m-d');
         $this->damage_description = $report->damage_description;
-        $this->damage_status = $report->damage_status;
+        $this->damage_status = array_key_exists($report->damage_status, self::STATUSES) ? $report->damage_status : 'Under Repair';
         $this->assessment_notes = $report->assessment_notes;
         $this->repair_notes = $report->repair_notes;
         $this->repair_cost = $report->repair_cost;
-        $this->repaired_date = $report->repaired_date ? $report->repaired_date->format('Y-m-d') : null;
+        $this->repaired_date = optional($report->repaired_date)->format('Y-m-d');
         $this->existingPhoto1Path = $report->photo1_path;
         $this->existingPhoto2Path = $report->photo2_path;
         $this->existingOtherDocumentPath = $report->other_document_path;
         $this->existingOtherDocumentName = $report->other_document_name;
-        $this->isEdit=true;
-        $this->openModal();
+        $this->isModalOpen = true;
     }
 
-    public function delete($id)
+    public function closeModal()
     {
-        $report = AssetDamageReport::find($id);
-        if ($report) {
-            if ($report->photo1_path) Storage::disk('public')->delete($report->photo1_path);
-            if ($report->photo2_path) Storage::disk('public')->delete($report->photo2_path);
-            if ($report->other_document_path) Storage::disk('public')->delete($report->other_document_path);
-            $report->delete();
-            session()->flash('message', 'Laporan Kerusakan berhasil dihapus.');
-        }
-    }
-    public function selectSingleAsset($assetId)
-    {
-        // toggle (klik ulang akan hilangkan centang)
-        $this->selected_assets = $this->selected_assets === $assetId ? null : $assetId;
-    }
-    private function resetInputFields() { $this->reset(); $this->mount();$this->isEdit=false; }
-    public function openModal() { $this->isModalOpen = true; }
-    public function closeModal() 
-    { 
-        $this->selected_assets = [];
-        $this->assetsForSelection = [];
-        $this->filteredAssets = [];
-        $this->searchAsset = '';
-        $this->assetEdit='';
         $this->isModalOpen = false;
-        $this->isEdit=false; 
     }
-    public function updatedSearch() { $this->resetPage(); }
+
+    protected function resetForm(): void
+    {
+        $this->reset([
+            'damage_report_id', 'from_jobsite_id', 'asset_id', 'searchAsset', 'reported_by_user_id', 'reporterSearch',
+            'report_date', 'damage_description', 'damage_status', 'assessment_notes', 'repair_notes', 'repair_cost',
+            'repaired_date', 'photo1', 'photo2', 'other_document',
+            'existingPhoto1Path', 'existingPhoto2Path', 'existingOtherDocumentPath', 'existingOtherDocumentName',
+        ]);
+        $this->resetValidation();
+    }
+
+    public function store()
+    {
+        $this->validate();
+
+        $stored = [];
+        try {
+            $result = DB::transaction(function () use (&$stored) {
+                $asset = Asset::whereKey($this->asset_id)->lockForUpdate()->firstOrFail();
+                $report = $this->damage_report_id ? AssetDamageReport::lockForUpdate()->findOrFail($this->damage_report_id) : null;
+
+                if ($report && in_array($report->damage_status, self::FINAL_STATUSES, true)) {
+                    throw new \RuntimeException('Laporan ini sudah final dan tidak bisa diubah.');
+                }
+                if (!$report) {
+                    if (!in_array($asset->status, self::REPORTABLE_ASSET_STATUSES, true)) {
+                        throw new \RuntimeException("Aset {$asset->asset_number} berstatus {$asset->status} dan tidak bisa dilaporkan rusak.");
+                    }
+                    if ($open = AssetDamageReport::where('asset_id', $asset->id)->whereIn('damage_status', self::OPEN_STATUSES)->first()) {
+                        throw new \RuntimeException("Aset ini masih punya laporan kerusakan aktif (#{$open->id}). Perbarui laporan itu.");
+                    }
+                }
+
+                $data = [
+                    'asset_id' => $asset->id,
+                    'reported_by_user_id' => $this->reported_by_user_id,
+                    'report_date' => $this->report_date,
+                    'damage_description' => trim($this->damage_description),
+                    'damage_status' => $this->damage_status,
+                    'assessment_notes' => $this->assessment_notes,
+                    'repair_notes' => $this->repair_notes,
+                    'repair_cost' => $this->repair_cost !== '' ? $this->repair_cost : null,
+                    'repaired_date' => $this->repaired_date ?: null,
+                    'updated_by_user_id' => Auth::id(),
+                ];
+                if (!$report) {
+                    $data['created_by_user_id'] = Auth::id();
+                    // Disimpan agar status aset bisa dipulihkan saat laporan ditutup / dibatalkan.
+                    $data['asset_status_before_report'] = $asset->status === 'Repair' ? 'Free' : $asset->status;
+                    $report = AssetDamageReport::create($data);
+                } else {
+                    $report->update($data);
+                }
+
+                foreach (['photo1' => ['photo1_path', 'photos'], 'photo2' => ['photo2_path', 'photos'], 'other_document' => ['other_document_path', 'documents']] as $prop => [$column, $folder]) {
+                    if ($this->$prop) {
+                        $path = $this->$prop->store("asset_damage_files/{$report->id}/{$folder}", 'public');
+                        $stored[] = $path;
+                        $update = [$column => $path];
+                        if ($prop === 'other_document') {
+                            $update['other_document_name'] = $this->other_document->getClientOriginalName();
+                        }
+                        $report->update($update);
+                    }
+                }
+
+                return [$report, $this->applyAssetStatus($report, $asset)];
+            });
+        } catch (WorkflowNotConfigured $e) {
+            foreach ($stored as $p) Storage::disk('public')->delete($p);
+            $this->addError('damage_status', $e->getMessage());
+            return;
+        } catch (\RuntimeException $e) {
+            foreach ($stored as $p) Storage::disk('public')->delete($p);
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa disimpan', 'text' => $e->getMessage()]);
+            return;
+        } catch (\Throwable $e) {
+            foreach ($stored as $p) Storage::disk('public')->delete($p);
+            Log::error('Simpan laporan kerusakan gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Laporan gagal disimpan. Coba lagi atau hubungi Administrator.']);
+            return;
+        }
+
+        [$report, $assetNote] = $result;
+        $this->isModalOpen = false;
+        $this->dispatch('swal:success', ['title' => 'Laporan tersimpan', 'text' => "Laporan #{$report->id}: {$assetNote}"]);
+    }
+
+    /**
+     * Sesuaikan status aset dengan status laporan. Mengembalikan keterangan untuk notifikasi.
+     */
+    protected function applyAssetStatus(AssetDamageReport $report, Asset $asset): string
+    {
+        switch ($report->damage_status) {
+            case 'Under Repair':
+            case 'Awaiting Parts':
+                $asset->update(['status' => 'Repair']);
+                return "aset {$asset->asset_number} berstatus Repair.";
+
+            case 'Closed':
+            case 'Cancelled':
+                $restore = $report->asset_status_before_report ?: ($asset->holder_user_id ? 'Used' : 'Free');
+                if (in_array($restore, ['Repair', 'Demage'], true)) {
+                    $restore = $asset->holder_user_id ? 'Used' : 'Free';
+                }
+                $asset->update(['status' => $restore]);
+                return "aset {$asset->asset_number} kembali berstatus {$restore}.";
+
+            case 'Beyond Economic Repair':
+                // Workflow DISPOSED belum siap -> WorkflowNotConfigured, semua perubahan dibatalkan.
+                $disposal = AssetDisposal::create($asset, Auth::user(),
+                    "Rusak berat dari laporan kerusakan #{$report->id}: {$report->damage_description}",
+                    'DAMAGED', ['previous_status' => 'Repair']);
+                $asset->update(['status' => 'Pre Disposed']);
+                if (AssetDisposal::finishIfAutoApproved($disposal)) {
+                    return "disposal {$disposal->transaction_number} disetujui otomatis (Anda approver semua tahap); aset Disposed.";
+                }
+                return "pengajuan disposal {$disposal->transaction_number} dibuat dan menunggu approval.";
+        }
+
+        return '';
+    }
+
+    public function render()
+    {
+        $statusCounts = AssetDamageReport::select('damage_status', DB::raw('count(*) as total'))->groupBy('damage_status')->pluck('total', 'damage_status');
+
+        $reports = AssetDamageReport::query()
+            ->with(['asset:id,asset_number,serial_number,status,jobsite_id,asset_type_id,asset_series_id', 'asset.jobsite:id,code', 'asset.assetType:id,name', 'asset.assetSeries:id,name', 'reporter:id,name'])
+            ->when($this->statusFilter === 'open', fn ($q) => $q->whereIn('damage_status', self::OPEN_STATUSES))
+            ->when($this->statusFilter && $this->statusFilter !== 'open', fn ($q) => $q->where('damage_status', $this->statusFilter))
+            ->when($this->search, function ($q) {
+                $term = '%' . $this->search . '%';
+                $q->where(fn ($w) => $w->where('damage_description', 'like', $term)
+                    ->orWhereHas('asset', fn ($a) => $a->where('asset_number', 'like', $term)->orWhere('serial_number', 'like', $term))
+                    ->orWhereHas('reporter', fn ($r) => $r->where('name', 'like', $term)));
+            })
+            ->orderByDesc('report_date')->orderByDesc('id')
+            ->paginate(10);
+
+        // Data form hanya dimuat saat modal terbuka (tidak disimpan di state komponen).
+        $assetOptions = collect();
+        $reporterOptions = collect();
+        $selectedAsset = null;
+        if ($this->isModalOpen) {
+            $selectedAsset = $this->asset_id ? Asset::with(['assetType:id,name', 'assetSeries:id,name', 'holder:id,name', 'jobsite:id,code'])->find($this->asset_id) : null;
+            if (!$this->damage_report_id && $this->from_jobsite_id) {
+                $assetOptions = Asset::query()
+                    ->where('jobsite_id', $this->from_jobsite_id)
+                    ->whereIn('status', self::REPORTABLE_ASSET_STATUSES)
+                    ->whereDoesntHave('damageReports', fn ($q) => $q->whereIn('damage_status', self::OPEN_STATUSES))
+                    ->when($this->searchAsset, function ($q) {
+                        $term = '%' . $this->searchAsset . '%';
+                        $q->where(fn ($w) => $w->where('asset_number', 'like', $term)->orWhere('serial_number', 'like', $term)
+                            ->orWhereHas('assetSeries', fn ($s) => $s->where('name', 'like', $term)));
+                    })
+                    ->with(['assetType:id,name', 'assetSeries:id,name', 'holder:id,name'])
+                    ->orderBy('asset_number')->limit(50)
+                    ->get(['id', 'asset_number', 'serial_number', 'status', 'asset_type_id', 'asset_series_id', 'holder_user_id']);
+            }
+            if (strlen(trim($this->reporterSearch)) >= 2) {
+                $term = '%' . trim($this->reporterSearch) . '%';
+                $reporterOptions = User::where(fn ($w) => $w->where('name', 'like', $term)->orWhere('nik', 'like', $term))
+                    ->orderBy('name')->limit(8)->get(['id', 'name', 'nik']);
+            }
+        }
+
+        return view('livewire.master.asset.damages.manage-damage-reports', [
+            'damageReports' => $reports,
+            'statusCounts' => $statusCounts,
+            'openCount' => $statusCounts->only(self::OPEN_STATUSES)->sum(),
+            'statuses' => self::STATUSES,
+            'allJobsites' => $this->isModalOpen ? Jobsite::orderBy('code')->get(['id', 'code', 'name']) : collect(),
+            'assetOptions' => $assetOptions,
+            'selectedAsset' => $selectedAsset,
+            'reporter' => $this->isModalOpen && $this->reported_by_user_id ? User::find($this->reported_by_user_id, ['id', 'name', 'nik']) : null,
+            'reporterOptions' => $reporterOptions,
+            'editingReport' => $this->isModalOpen && $this->damage_report_id
+                ? AssetDamageReport::with(['creator:id,name', 'updater:id,name'])->find($this->damage_report_id)
+                : null,
+        ]);
+    }
 }

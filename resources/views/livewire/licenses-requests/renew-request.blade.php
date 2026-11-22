@@ -18,6 +18,12 @@
                                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                             </div>
                         @endif
+                        @if ($workflowWarning)
+                            <div class="alert alert-warning d-flex gap-2" role="alert">
+                                <i class="bx bx-error fs-4 flex-shrink-0"></i>
+                                <div><strong>Pengajuan belum bisa dikirim.</strong><br>{{ $workflowWarning }}</div>
+                            </div>
+                        @endif
                         @if (session()->has('error'))
                             <div class="alert alert-danger alert-dismissible fade show" role="alert">
                                 <i class="bx bx-error-circle me-2"></i> {{ session('error') }}

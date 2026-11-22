@@ -42,7 +42,6 @@ class ManageAsset extends Component
     public $jobsites = [];
     public $departements = [];
     public $entities = [];
-    public $users = []; // Untuk holder
 
     public $selectedJobsite = ''; // Asumsi Anda punya filter ini
     public $selectedStatus = '';  // Asumsi Anda punya filter ini
@@ -76,7 +75,6 @@ class ManageAsset extends Component
     public function openReturnModal($assetId)
     {
         $this->dispatch('openReturnModal', $assetId);
-        $this->dispatch('refreshParentComponent');
     }
      // Method untuk memicu modal inspeksi
      public function inspectAsset($assetId)
@@ -95,12 +93,17 @@ class ManageAsset extends Component
             $this->dispatch('openInspectionModal', $transaction->id);
         } else {
             // Jika tidak, tampilkan pesan error
-            $this->dispatch('show-toast', [
-                'type' => 'error',
-                'message' => 'Tidak ada transaksi pengembalian yang menunggu inspeksi untuk aset ini.'
+            $this->dispatch('swal:error', [
+                'title' => 'Gagal',
+                'text' => 'Tidak ada transaksi pengembalian yang menunggu inspeksi untuk aset ini.'
             ]);
         }
     }
+    public function openDisposal($assetId, $mode = 'LOST')
+    {
+        $this->dispatch('openDisposalModal', ['asset_id' => $assetId, 'mode' => $mode === 'DISPOSE' ? 'DISPOSE' : 'LOST']);
+    }
+
     public function createBast($assetId = null)
     {
         $this->dispatch('openBastModal', ['asset_id' => $assetId]);
@@ -114,31 +117,46 @@ class ManageAsset extends Component
         $this->jobsites = Jobsite::orderBy('name')->get(['id', 'name', 'code']);
         $this->departement_id =  $user->department_id;
         $this->departements =  Department::orderBy('code')->get(['id','name','code']);
-        $this->users = User::orderBy('name')->get(['id', 'name', 'nik']); // Ambil NIK untuk display
         $this->entities = Entity::orderBy('name')->get(['id','code','name']);
         $this->status='Free';
         $this->assetBrands = collect();
         $this->assetSeriesCollection = collect();
         if (!$user || !$user->department_id || !$user->jobsite_id) {
-            dd('Proses dihentikan: User yang login tidak memiliki Department ID atau Jobsite ID yang lengkap.');
+            abort(403, 'Akun Anda belum memiliki Department atau Jobsite. Hubungi Administrator.');
         }
         
        
     }
     public function SendFUWhatApp($userID){
-        $user = User::findOrFail($userID);
-        $wa = $user->whatsapp;
-        
-        $pesan = "Halo $user->name, terdapat aset yang memerlukan proses BAST. Mohon segera lakukan pengecekan dan tindak lanjut Konfirmasi pada sistem AMS.\n";
-        $pesan .="Yang ada pada menu *Asset Saya*";
-        sendMessageWithWhatsApp($wa,$pesan);
-        $last5 = substr($wa, -5); // ambil 5 karakter terakhir
-        $hidden = str_repeat('•', strlen($wa) - 5); // ganti sisanya dengan •
-        $masked = $hidden . $last5;
-        $namane = $user->name;
+        $user = User::find($userID);
+        $wa = (string) ($user->whatsapp ?? '');
+        if (!$user || $wa === '') {
+            $this->dispatch('swal:error', [
+                'title' => 'Gagal',
+                'text' => 'User ini belum punya nomor WhatsApp, mohon kabari langsung.',
+            ]);
+            return;
+        }
+
+        $pesan = "Halo {$user->name}, terdapat aset yang memerlukan proses BAST. Mohon segera lakukan pengecekan dan tindak lanjut Konfirmasi pada sistem AMS.\n";
+        $pesan .= "Yang ada pada menu *Asset Saya*";
+
+        try {
+            $sent = sendMessageWithWhatsApp($wa, $pesan);
+        } catch (\Throwable $e) {
+            Log::warning("Follow up WA ke user #{$user->id} gagal: " . $e->getMessage());
+            $sent = false;
+        }
+
+        if (!$sent) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Pesan WhatsApp gagal dikirim. Coba lagi nanti.']);
+            return;
+        }
+
+        $masked = str_repeat('•', max(0, strlen($wa) - 4)) . substr($wa, -4);
         $this->dispatch('swal:success', [
             'title' => 'Berhasil!',
-            'text' => 'Pesan di kirim ke '. $namane.' No Whatsapp '. $masked.' 🙏',
+            'text' => 'Pesan dikirim ke ' . $user->name . ' No WhatsApp ' . $masked . ' 🙏',
         ]);
     }
     protected function rules()
@@ -263,8 +281,20 @@ class ManageAsset extends Component
     
     public function render()
     {
-        $this->statuses = Asset::select('status')->distinct()->get();
-        $query = Asset::with(['assetType', 'assetBrand', 'assetSeries', 'jobsite', 'holder','entity', 'creator']);
+        // Jumlah aset per status (mengikuti filter site) untuk chip & dropdown filter.
+        $statusCounts = Asset::query()
+            ->when($this->selectedJobsite, fn ($q) => $q->where('jobsite_id', $this->selectedJobsite))
+            ->select('status', DB::raw('count(*) as total'))
+            ->groupBy('status')
+            ->orderBy('status')
+            ->pluck('total', 'status');
+        $this->statuses = $statusCounts->keys()->map(fn ($s) => (object) ['status' => $s]);
+
+        $query = Asset::with([
+            'assetType:id,name', 'assetBrand:id,name', 'assetSeries:id,name,material_code',
+            'jobsite:id,code,name', 'holder:id,name,nik', 'entity:id,code,name',
+            'departement:id,code,name', 'costCenter:id,cost_center_number',
+        ]);
         if (!empty($this->selectedJobsite)) {
             $query->where('jobsite_id', $this->selectedJobsite);
         }
@@ -302,7 +332,10 @@ class ManageAsset extends Component
        
         return view('livewire.master.asset.manage-asset', [
             'assetsCollection' => $assetsCollection,
-            'waittingGRCount' => $waittingGRCount
+            'statusCounts' => $statusCounts,
+            'waittingGRCount' => $waittingGRCount,
+            // Daftar holder (6000+ user) hanya dimuat saat form terbuka, tidak disimpan di state komponen.
+            'users' => $this->isModalOpen ? User::orderBy('name')->get(['id', 'name', 'nik']) : collect(),
         ]);
     }
     public function create()
@@ -513,6 +546,27 @@ class ManageAsset extends Component
         } catch (\Exception $e) {
             session()->flash('error', 'Gagal menghapus aset. ' . $e->getMessage());
         }
+    }
+
+    public function updatedSelectedJobsite()
+    {
+        $this->resetPage();
+    }
+
+    public function updatedSelectedStatus()
+    {
+        $this->resetPage();
+    }
+
+    public function updatedPerPage()
+    {
+        $this->resetPage();
+    }
+
+    public function resetFilters()
+    {
+        $this->reset(['search', 'selectedJobsite', 'selectedStatus']);
+        $this->resetPage();
     }
 
     public function updatedSearch()

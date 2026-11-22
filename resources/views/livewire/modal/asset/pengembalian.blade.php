@@ -1,4 +1,10 @@
 <div>
+    {{-- Indikator saat modal sedang dimuat --}}
+    <div wire:loading.flex wire:target="loadAssetToReturn" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center" style="background: rgba(0,0,0,.25); z-index: 1060;">
+        <div class="bg-white rounded shadow px-4 py-3 d-flex align-items-center gap-2">
+            <span class="spinner-border spinner-border-sm text-primary" role="status"></span> Memuat...
+        </div>
+    </div>
     @if ($isModalOpen)
         <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
             <div class="modal-dialog modal-dialog-centered">
@@ -13,7 +19,9 @@
                                 <p>Anda akan mengajukan pengembalian untuk aset berikut:</p>
                                 <div class="alert alert-light">
                                     <strong>Nomor Aset:</strong> {{ $assetToReturn->asset_number }} <br>
-                                    <strong>Deskripsi:</strong> {{ $assetToReturn->assetType->name ?? '' }} {{ $assetToReturn->assetBrand->name ?? '' }} {{ $assetToReturn->assetSeries->name ?? '' }}
+                                    <strong>Deskripsi:</strong> {{ $assetToReturn->assetType->name ?? '' }} {{ $assetToReturn->assetBrand->name ?? '' }} {{ $assetToReturn->assetSeries->name ?? '' }}<br>
+                                    <strong>Pemegang:</strong> {{ $assetToReturn->holder->name ?? '-' }}<br>
+                                    <strong>Serial number:</strong> {{ $assetToReturn->serial_number ?: '-' }}
                                 </div>
                                 
                                 <div class="mb-3">
@@ -42,7 +50,7 @@
                         </div>
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" wire:click="closeModal">Batal</button>
-                            <button type="submit" class="btn btn-primary" @if(!$assetToReturn) disabled @endif>
+                            <button type="submit" class="btn btn-primary" wire:loading.attr="disabled" wire:target="submitReturn" @if(!$assetToReturn) disabled @endif>
                                 <span wire:loading.remove wire:target="submitReturn">Ajukan Pengembalian</span>
                                 <span wire:loading wire:target="submitReturn">Memproses...</span>
                             </button>

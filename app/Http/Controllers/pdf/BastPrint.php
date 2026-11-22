@@ -12,6 +12,7 @@ class BastPrint extends Controller
     public function view(int $id)
     {
         $bast = Asset::with(['transaction.items','transaction.fromUser','transaction.toUser','transaction.fromJobsite','transaction.toJobsite','transaction.approvals'])->findOrFail($id);
+        abort_if(!$bast->transaction, 404, 'Aset ini belum memiliki transaksi serah terima.');
         $pdf = Pdf::loadView('pdf.bast_asset', compact('bast'))->setPaper('A4', 'portrait');
         return $pdf->stream("BAST-{$bast->nomor}.pdf");
     }

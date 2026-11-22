@@ -36,6 +36,9 @@
                   > --}}
                 </li>
 
+                {{-- Notifikasi: hal yang menunggu persetujuan user --}}
+                <livewire:components.nav.approval-bell lazy />
+
                 <!-- User -->
                 <li class="nav-item navbar-dropdown dropdown-user dropdown">
                   <a

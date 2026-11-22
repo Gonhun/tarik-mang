@@ -1,341 +1,221 @@
 <div class="container-fluid py-4">
-    @if (empty(Auth::user()->position->job_description_name) )
-    <div class="container-fluid py-4">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-12">
-                    <div class="alert alert-danger text-center py-4">
-                        <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                        <h5 class="mb-2">JOBDESK JABATAN <b>{{Auth::user()->position->name}}</b> BELUM DI UPLOAD!</h5>
-                        {{-- <p class="mb-0">untuk upload SO atau Jobdesk <a href="{{ route('myprofil') }}"> Klik disini</a></p> --}}
-                    </div>
-                </div>
-            </div>
+    {{-- Header --}}
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+        <div>
+            <a href="{{ route('asset-requests.dashboard') }}" class="small text-muted"><i class="bx bx-chevron-left"></i>Pengajuan aset</a>
+            <h4 class="mb-1 mt-1">Ajukan aset</h4>
+            <p class="text-muted mb-0">Item standar jabatan Anda sudah terisi otomatis. Lengkapi keperluan lalu kirim.</p>
         </div>
     </div>
-    {{-- @elseif($request_active)   
-    <div class="container-fluid py-4">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-12">
-                    <div class="alert alert-danger text-center py-4">
-                        <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                        <h5 class="mb-2">Masi ada pengajuan belum selesai validasi / On Progress</h5>
+
+    @if (!$user->position)
+        <div class="alert alert-danger d-flex gap-2" role="alert"><i class="bx bx-error-alt fs-4"></i><div><strong>Jabatan Anda belum diatur.</strong> Hubungi tim IT/HR agar jabatan diisi sebelum mengajukan aset.</div></div>
+    @elseif (!$hasJobdesc)
+        <div class="alert alert-danger d-flex gap-2" role="alert"><i class="bx bx-error-alt fs-4"></i><div><strong>Jobdesk jabatan {{ $user->position->name }} belum diunggah.</strong> Pengajuan aset memerlukan jobdesk jabatan. Hubungi tim IT/HR.</div></div>
+    @elseif (empty($items))
+        {{-- Tidak ada kebutuhan standar --}}
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex gap-3 align-items-start">
+                    <span class="avatar flex-shrink-0"><span class="avatar-initial rounded bg-label-success"><i class="bx bx-check-circle fs-4"></i></span></span>
+                    <div>
+                        <h5 class="mb-1">Standar aset jabatan Anda sudah terpenuhi</h5>
+                        <p class="text-muted mb-3">Pengajuan aset mengikuti standar jabatan <strong>{{ $user->position->name }}</strong>. Saat ini tidak ada kebutuhan yang belum terpenuhi.</p>
+                        @if ($standards->isNotEmpty())
+                            <ul class="list-unstyled small mb-3">
+                                @foreach ($standards as $st)
+                                    <li><i class="bx {{ $st['fulfilled'] ? 'bx-check text-success' : 'bx-minus text-muted' }}"></i> {{ $st['label'] }} × {{ $st['quantity'] }}</li>
+                                @endforeach
+                            </ul>
+                        @else
+                            <p class="small text-muted">Belum ada standar aset untuk jabatan ini. Hubungi tim IT bila Anda membutuhkan aset.</p>
+                        @endif
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="{{ route('my.asset') }}" class="btn btn-sm btn-outline-primary">Lihat aset saya</a>
+                            <a href="{{ route('asset-requests.dashboard') }}" class="btn btn-sm btn-outline-secondary">Kembali</a>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div> --}}
     @else
-        @if (!empty($items))
-            {{-- @if (empty(Auth::user()->manager_id) && Auth::user()->department->code !='DIR')
-                <div class="container-fluid py-4">
-                    <div class="card-body">
-                        <div class="row">
-                            <div class="col-12">
-                                <div class="alert alert-danger text-center py-4">
-                                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                                    <h5 class="mb-2">Anda belum memilih atasan langsung</h5>
-                                    <p class="mb-0"></p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>   
-            @else --}}
-                <form wire:submit.prevent="submitRequest" class="card" id="assetRequestForm">
-                    <div class="card-header border-bottom">
-                        <h5 class="card-title mb-0">Form Pengajuan Aset Baru</h5>
-                        <p class="text-muted small mb-0">Item akan terisi otomatis sesuai standar jabatan Anda. Anda bisa menambahkan item non-standar jika diperlukan.</p>
+        @if ($workflowWarning)
+            <div class="alert alert-warning d-flex gap-2" role="alert"><i class="bx bx-error fs-4 flex-shrink-0"></i><div><strong>Pengajuan belum bisa dikirim.</strong><br>{{ $workflowWarning }}</div></div>
+        @endif
+        @if (session()->has('error'))
+            <div class="alert alert-danger" role="alert">{{ session('error') }}</div>
+        @endif
+
+        <div class="row g-4">
+            {{-- Kiri: item & keperluan --}}
+            <div class="col-lg-8">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center pb-2">
+                        <h5 class="card-title mb-0">1. Aset yang dibutuhkan</h5>
+                        <button type="button" wire:click="resetFormAndLoadStandards" wire:confirm="Kembalikan daftar item ke standar jabatan? Item tambahan akan dihapus." class="btn btn-sm btn-link px-0">
+                            <i class="bx bx-reset"></i> Reset ke standar
+                        </button>
                     </div>
                     <div class="card-body">
-                        {{-- Notifikasi --}}
-                        @if (session()->has('message'))
-                            <div class="alert alert-success">{{ session('message') }}</div>
-                        @endif
-                        @if (session()->has('error'))
-                            <div class="alert alert-danger">{{ session('error') }}</div>
-                        @endif
-            
-                        {{-- Bagian 1: Informasi Umum Pengajuan --}}
-                        <h6 class="text-primary">INFORMASI UMUM</h6>
-                        <hr class="mt-0 mb-3">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Diajukan Oleh</label>
-                                <input type="text" value="{{ Auth::user()->name }} ({{ Auth::user()->nik }})" class="form-control" readonly disabled>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Jobsite</label>
-                                <input type="text" value="{{ Auth::user()->jobsite->name ?? 'Tidak Terdefinisi' }}" class="form-control" readonly disabled>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label for="purpose" class="form-label">Tujuan/Keperluan Pengajuan <span class="text-danger">*</span></label>
-                                <textarea wire:model.defer="purpose" id="purpose" class="form-control @error('purpose') is-invalid @enderror" rows="3" placeholder="Contoh: Untuk karyawan baru, penggantian aset rusak, kebutuhan project..."></textarea>
-                                @error('purpose') <span class="text-danger small">{{ $message }}</span> @enderror
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label for="needed_date" class="form-label">Tanggal Dibutuhkan <span class="text-danger">Standart Pengadaan 14 Hari</span></label>
-                                <input type="date" wire:model.defer="needed_date" id="needed_date" class="form-control @error('needed_date') is-invalid @enderror">
-                                @error('needed_date') <span class="text-danger small">{{ $message }}</span> @enderror
-                            </div>
-                        </div>
-                        <h5 class="mt-4 text-primary">BERITA ACARA <span class="text-danger">Jika ada</span></h5>
-                        <hr class="mt-0 mb-3">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <div class="mb-3">
-                                    <label for="ba_budget_outside" class="form-label">Upload File BA Diluar Budget (PDF/DOC/DOCX/PNG/JPG - Maks 2MB)</label>
-                                    <input type="file" wire:model="ba_budget_outside" id="ba_budget_outside" class="form-control @error('ba_budget_outside') is-invalid @enderror">
-                                    <div wire:loading wire:target="ba_budget_outside" class="mt-1 small text-primary">Uploading...</div>
-                                    @error('ba_budget_outside') <span class="text-danger small">{{ $message }}</span> @enderror
-                                    
-                                    @if($ba_budget_outside)
-                                        <div class="mt-2 d-flex align-items-center">
-                                            <small class="text-muted">Preview: {{ $ba_budget_outside->getClientOriginalName() }}</small>
-                                            <button type="button" class="btn btn-link btn-sm p-0 ms-2" data-bs-toggle="modal" data-bs-target="#baBudgetOutsideModal">
-                                                <i class="bx bx-show"></i> Lihat File
-                                            </button>
-                                            <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" wire:click.prevent="$set('ba_budget_outside', null)">
-                                                <i class="bx bx-trash"></i> Hapus
-                                            </button>
-                                        </div>
+                        @error('items') <div class="alert alert-danger py-2 small">{{ $message }}</div> @enderror
 
-                                        <!-- Modal Preview BA Diluar Budget -->
-                                        <div class="modal fade" id="baBudgetOutsideModal" tabindex="-1" aria-labelledby="baBudgetOutsideModalLabel" aria-hidden="true">
-                                            <div class="modal-dialog modal-xl modal-dialog-centered">
-                                                <div class="modal-content">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title" id="baBudgetOutsideModalLabel">Preview File BA Diluar Budget</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                    </div>
-                                                    <div class="modal-body" style="min-height:60vh;">
-                                                        @php
-                                                            $mime = $ba_budget_outside->getMimeType();
-                                                        @endphp
-                                                        @if(Str::startsWith($mime, 'image/'))
-                                                            <img src="{{ $ba_budget_outside->temporaryUrl() }}" alt="Preview" class="img-fluid w-100" style="max-height: 70vh; object-fit: contain;">
-                                                        @elseif($mime === 'application/pdf')
-                                                        <object data="{{ $ba_budget_outside->temporaryUrl() }}" type="application/pdf" width="100%" height="600px">
-                                                            <p>Browser kamu tidak mendukung preview PDF. 
-                                                                <a href="{{ $ba_budget_outside->temporaryUrl() }}">Klik di sini untuk download</a>.
-                                                            </p>
-                                                        </object>
-                                                        @else
-                                                            <p class="text-danger">Preview tidak tersedia untuk file ini.</p>
-                                                        @endif
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
+                        @foreach ($items as $index => $item)
+                            @php
+                                $std = !empty($item['is_standard']);
+                                $brands = $catalog['brands']->where('asset_type_id', $item['asset_type_id']);
+                                $series = $catalog['series']->where('asset_brand_id', $item['asset_brand_id']);
+                                $typeName = $catalog['types']->firstWhere('id', $item['asset_type_id'])->name ?? null;
+                                $seriesRow = $catalog['series']->firstWhere('id', $item['asset_series_id']);
+                            @endphp
+                            <div class="border rounded p-3 mb-3 {{ $std ? 'bg-lighter' : '' }}" wire:key="request-item-{{ $index }}">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <span class="fw-semibold">
+                                        Item {{ $index + 1 }}
+                                        <span class="badge bg-label-{{ $std ? 'success' : 'warning' }} ms-1">{{ $std ? 'Standar jabatan' : 'Tambahan' }}</span>
+                                    </span>
+                                    @if (count($items) > 1)
+                                        <button type="button" wire:click="removeItem({{ $index }})" class="btn btn-sm btn-text-danger p-1" aria-label="Hapus item {{ $index + 1 }}"><i class="bx bx-trash"></i></button>
                                     @endif
                                 </div>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <div class="mb-3">
-                                    <label for="ba_damage" class="form-label">Upload File BA Kerusakan (PDF/DOC/DOCX/PNG/JPG - Maks 2MB)</label>
-                                    <input type="file" wire:model="ba_damage" id="ba_damage" class="form-control @error('ba_damage') is-invalid @enderror">
-                                    <div wire:loading wire:target="ba_damage" class="mt-1 small text-primary">Uploading...</div>
-                                    @error('ba_damage') <span class="text-danger small">{{ $message }}</span> @enderror
-                                    
-                                    @if($ba_damage)
-                                        <div class="mt-2 d-flex align-items-center">
-                                            <small class="text-muted">Preview: {{ $ba_damage->getClientOriginalName() }}</small>
-                                            <button type="button" class="btn btn-link btn-sm p-0 ms-2" data-bs-toggle="modal" data-bs-target="#baDamageModal">
-                                                <i class="bx bx-show"></i> Lihat File
-                                            </button>
-                                            <button type="button" class="btn btn-link btn-sm text-danger p-0 ms-2" wire:click.prevent="$set('ba_damage', null)">
-                                                <i class="bx bx-trash"></i> Hapus
-                                            </button>
-                                        </div>
 
-                                        <!-- Modal Preview BA Kerusakan -->
-                                        <div class="modal fade" id="baDamageModal" tabindex="-1" aria-labelledby="baDamageModalLabel" aria-hidden="true">
-                                            <div class="modal-dialog modal-xl modal-dialog-centered">
-                                                <div class="modal-content">
-                                                    <div class="modal-header">
-                                                        <h5 class="modal-title" id="baDamageModalLabel">Preview File BA Kerusakan</h5>
-                                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                                                    </div>
-                                                    <div class="modal-body" style="min-height:60vh;">
-                                                        @php
-                                                            $mime = $ba_damage->getMimeType();
-                                                        @endphp
-                                                        @if(Str::startsWith($mime, 'image/'))
-                                                            <img src="{{ $ba_damage->temporaryUrl() }}" alt="Preview" class="img-fluid w-100" style="max-height: 70vh; object-fit: contain;">
-                                                        @elseif($mime === 'application/pdf')
-                                                        <object data="{{ $ba_damage->temporaryUrl() }}" type="application/pdf" width="100%" height="600px">
-                                                            <p>Browser kamu tidak mendukung preview PDF. 
-                                                                <a href="{{ $ba_damage->temporaryUrl() }}">Klik di sini untuk download</a>.
-                                                            </p>
-                                                        </object>
-                                                        @else
-                                                            <p class="text-danger">Preview tidak tersedia untuk file ini.</p>
-                                                        @endif
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    @endif
-                                </div>
-                            </div>
-                        </div>
-                        
-                   
-                        {{-- Bagian 2: Item Aset yang Diajukan --}}
-                        <h5 class="mt-4 text-primary">ITEM ASET YANG DIAJUKAN</h5>
-                        <hr class="mt-0 mb-3">
-                        {{-- @error('items') <div class="alert alert-danger text-white py-2 px-3 mb-2">{{ $message }}</div> @enderror --}}
-                        @forelse($items as $index => $item)
-                            <div class="card mb-3 shadow-sm" wire:key="request-item-{{ $index }}">
-                                <div class="card-header d-flex justify-content-between align-items-center py-2 bg-light">
-                                    <h6 class="mb-0">Item #{{ $index + 1 }}</h6>
-                                    <div>
-                                        @if($item['is_standard'])
-                                            <span class="badge bg-success">Item Standar</span>
-                                        @else
-                                            <span class="badge bg-warning">Item Non-Standar</span>
-                                        @endif
-                                        @if(count($items)>1)
-                                            <button type="button" wire:click="removeItem({{ $index }})" class="btn btn-sm btn-outline-danger p-1" title="Hapus Item Ini">
-                                                <i class="bx bx-bxs-trash"></i> Hapus
-                                            </button>
+                                @if ($std)
+                                    {{-- Item standar: ringkas, tidak bisa diubah --}}
+                                    <div class="small">
+                                        <span class="fw-medium">{{ $typeName ?? '-' }} · {{ $seriesRow->name ?? '-' }}</span>
+                                        <span class="text-muted"> × {{ $item['quantity'] }}</span>
+                                        @if (!empty($item['item_description']))
+                                            <span class="d-block text-muted">{{ $item['item_description'] }}</span>
                                         @endif
                                     </div>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        {{-- Dropdown Tipe Aset --}}
-                                        <div class="col-md-4 mb-3">
-                                            <label for="items_{{ $index }}_type" class="form-label">Tipe Aset <span class="text-danger">*</span></label>
-                                            <select wire:model.live="items.{{ $index }}.asset_type_id" class="form-select @error('items.'.$index.'.asset_type_id') is-invalid @enderror" @if($item['is_standard']) disabled @endif>
-                                                <option value="">-- Pilih Tipe --</option>
-                                                @foreach($allTypes as $type)
+                                @else
+                                    <div class="row g-2">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label small mb-1" for="it_type_{{ $index }}">Tipe <span class="text-danger">*</span></label>
+                                            <select id="it_type_{{ $index }}" wire:model.live="items.{{ $index }}.asset_type_id" class="form-select form-select-sm @error('items.'.$index.'.asset_type_id') is-invalid @enderror">
+                                                <option value="">-- Pilih tipe --</option>
+                                                @foreach ($catalog['types'] as $type)
                                                     <option value="{{ $type->id }}">{{ $type->name }}</option>
                                                 @endforeach
                                             </select>
-                                            @error('items.'.$index.'.asset_type_id') <span class="text-danger small d-block">{{ $message }}</span> @enderror
                                         </div>
-            
-                                        {{-- Dropdown Merek Aset (Dinamis) --}}
-                                        <div class="col-md-4 mb-3">
-                                            <label for="items_{{ $index }}_brand" class="form-label">Merek Aset <span class="text-danger">*</span></label>
-                                            <select wire:model.live="items.{{ $index }}.asset_brand_id" class="form-select @error('items.'.$index.'.asset_brand_id') is-invalid @enderror" @if(empty($item['asset_type_id'])) disabled @endif @if($item['is_standard']) disabled @endif>
-                                                <option value="">-- Pilih Merek --</option>
-                                                @if(!empty($item['asset_type_id']))
-                                                    @foreach($allBrands->where('asset_type_id', $item['asset_type_id']) as $brand)
-                                                        <option value="{{ $brand->id }}">{{ $brand->name }}</option>
-                                                    @endforeach
-                                                @endif
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small mb-1" for="it_brand_{{ $index }}">Merek <span class="text-danger">*</span></label>
+                                            <select id="it_brand_{{ $index }}" wire:model.live="items.{{ $index }}.asset_brand_id" class="form-select form-select-sm @error('items.'.$index.'.asset_brand_id') is-invalid @enderror" @disabled(empty($item['asset_type_id']))>
+                                                <option value="">-- Pilih merek --</option>
+                                                @foreach ($brands as $brand)
+                                                    <option value="{{ $brand->id }}">{{ $brand->name }}</option>
+                                                @endforeach
                                             </select>
-                                            @error('items.'.$index.'.asset_brand_id') <span class="text-danger small d-block">{{ $message }}</span> @enderror
                                         </div>
-            
-                                        {{-- Dropdown Seri Aset (Dinamis) --}}
-                                        <div class="col-md-4 mb-3">
-                                            <label for="items_{{ $index }}_series" class="form-label">Seri Aset <span class="text-danger">*</span></label>
-                                            <select wire:model.defer="items.{{ $index }}.asset_series_id" class="form-select @error('items.'.$index.'.asset_series_id') is-invalid @enderror" @if(empty($item['asset_brand_id'])) disabled @endif @if($item['is_standard']) disabled @endif>
-                                                <option value="">-- Pilih Seri --</option>
-                                                @if(!empty($item['asset_brand_id']))
-                                                    @foreach($allSeries->where('asset_brand_id', $item['asset_brand_id']) as $series)
-                                                        <option value="{{ $series->id }}">{{ $series->name }}</option>
-                                                    @endforeach
-                                                @endif
+                                        <div class="col-6 col-md-4">
+                                            <label class="form-label small mb-1" for="it_series_{{ $index }}">Seri <span class="text-danger">*</span></label>
+                                            <select id="it_series_{{ $index }}" wire:model.live="items.{{ $index }}.asset_series_id" class="form-select form-select-sm @error('items.'.$index.'.asset_series_id') is-invalid @enderror" @disabled(empty($item['asset_brand_id']))>
+                                                <option value="">-- Pilih seri --</option>
+                                                @foreach ($series as $s)
+                                                    <option value="{{ $s->id }}">{{ $s->name }}</option>
+                                                @endforeach
                                             </select>
-                                            @error('items.'.$index.'.asset_series_id') <span class="text-danger small d-block">{{ $message }}</span> @enderror
+                                        </div>
+                                        <div class="col-4 col-md-2">
+                                            <label class="form-label small mb-1" for="it_qty_{{ $index }}">Jumlah <span class="text-danger">*</span></label>
+                                            <input id="it_qty_{{ $index }}" type="number" min="1" max="1000" wire:model.live.debounce.500ms="items.{{ $index }}.quantity" class="form-control form-control-sm @error('items.'.$index.'.quantity') is-invalid @enderror">
+                                        </div>
+                                        <div class="col-8 col-md-10">
+                                            <label class="form-label small mb-1" for="it_desc_{{ $index }}">Spesifikasi / catatan</label>
+                                            <input id="it_desc_{{ $index }}" type="text" wire:model="items.{{ $index }}.item_description" class="form-control form-control-sm" placeholder="{{ $seriesRow->specifications ?? 'Opsional' }}">
                                         </div>
                                     </div>
-                                    <div class="row">
-                                        <div class="col-md-3 mb-3">
-                                            <label for="items_{{ $index }}_quantity" class="form-label">Jumlah <span class="text-danger">*</span></label>
-                                            <input type="number" wire:model.defer="items.{{ $index }}.quantity" class="form-control @error('items.'.$index.'.quantity') is-invalid @enderror" min="1" @if($item['is_standard']) disabled @endif>
-                                            @error('items.'.$index.'.quantity') <span class="text-danger small d-block">{{ $message }}</span> @enderror
-                                        </div>
-                                        <div class="col-md-9 mb-3">
-                                            <label for="items_{{ $index }}_item_description" class="form-label">Deskripsi/Spesifikasi Tambahan</label>
-                                            <input type="text" wire:model.defer="items.{{ $index }}.item_description" class="form-control" @if($item['is_standard']) disabled @endif>
-                                        </div>
+                                    @foreach (['asset_type_id', 'asset_brand_id', 'asset_series_id', 'quantity'] as $f)
+                                        @error('items.'.$index.'.'.$f) <div class="text-danger small mt-1">{{ $message }}</div> @enderror
+                                    @endforeach
+                                @endif
+                            </div>
+                        @endforeach
+
+                        <button type="button" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem" class="btn btn-sm btn-outline-primary">
+                            <i class="bx bx-plus me-1"></i>Tambah item lain
+                        </button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header pb-2"><h5 class="card-title mb-0">2. Keperluan</h5></div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-12">
+                                <label for="purpose" class="form-label">Untuk apa aset ini dibutuhkan? <span class="text-danger">*</span></label>
+                                <textarea wire:model="purpose" id="purpose" rows="3" class="form-control @error('purpose') is-invalid @enderror" placeholder="Contoh: karyawan baru di site, pengganti laptop rusak, kebutuhan proyek..."></textarea>
+                                @error('purpose') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label for="needed_date" class="form-label">Dibutuhkan tanggal <span class="text-danger">*</span></label>
+                                <input type="date" wire:model="needed_date" id="needed_date" min="{{ now()->format('Y-m-d') }}" class="form-control @error('needed_date') is-invalid @enderror">
+                                <small class="text-muted">Standar pengadaan ±14 hari.</small>
+                                @error('needed_date') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+                            <div class="col-12 col-sm-6">
+                                <label for="remarks" class="form-label">Catatan lain <span class="text-muted fw-normal">(opsional)</span></label>
+                                <input type="text" wire:model="remarks" id="remarks" class="form-control @error('remarks') is-invalid @enderror">
+                                @error('remarks') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            </div>
+                        </div>
+
+                        <details class="mt-4" @if ($ba_damage || $ba_budget_outside || $errors->has('ba_damage') || $errors->has('ba_budget_outside')) open @endif>
+                            <summary class="fw-medium" style="cursor: pointer">Lampiran berita acara <span class="text-muted fw-normal">(opsional — jika pengganti aset rusak atau di luar budget)</span></summary>
+                            <div class="row g-3 mt-1">
+                                @foreach (['ba_damage' => 'BA kerusakan', 'ba_budget_outside' => 'BA di luar budget'] as $prop => $label)
+                                    <div class="col-12 col-md-6">
+                                        <label for="{{ $prop }}" class="form-label small">{{ $label }}</label>
+                                        <input type="file" id="{{ $prop }}" wire:model="{{ $prop }}" accept=".pdf,.doc,.docx,.png,.jpg" class="form-control form-control-sm @error($prop) is-invalid @enderror">
+                                        <div wire:loading wire:target="{{ $prop }}" class="small text-muted mt-1"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengunggah...</div>
+                                        @error($prop) <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                        @if ($this->$prop)
+                                            <div class="small mt-1 d-flex gap-2">
+                                                <span class="text-truncate">{{ $this->$prop->getClientOriginalName() }}</span>
+                                                @if (method_exists($this->$prop, 'isPreviewable') && $this->$prop->isPreviewable())
+                                                    <a href="{{ $this->$prop->temporaryUrl() }}" target="_blank">Lihat</a>
+                                                @endif
+                                                <a href="#" class="text-danger" wire:click.prevent="$set('{{ $prop }}', null)">Hapus</a>
+                                            </div>
+                                        @endif
+                                        <small class="text-muted">PDF/DOC/JPG/PNG, maks. 2 MB.</small>
                                     </div>
-                                </div>
+                                @endforeach
                             </div>
-                        @empty
-                            <div class="text-center p-3 border rounded">
-                                <p class="text-muted mb-1">Tidak ada item dalam pengajuan.</p>
-                            </div>
-                        @endforelse
-                        <button type="button" wire:click="addItem" class="btn btn-outline-secondary btn-sm mt-2">+ Tambah Item Non-Standar</button>
-                        <hr class="my-4">
-                        {{-- Bagian 3: Select IT --}}
-                        {{-- <div class="mb-3">
-                            <label for="it" class="form-label">IT yang Validasi<span class="text-danger">*</span></label>
-                            <select wire:model.defer="itsite" class="form-select @error('itsite') is-invalid @enderror">
-                                <option value="" selected>Pilih IT</option>
-                                @forelse ($itne as $it)
-                                    <option value="{{ $it->id }}">{{ $it->name }}</option>
-                                @empty
-                                    <option value="" disabled>Tidak ada IT Di Site ini</option>
-                                @endforelse
-                            </select>
-                            @error('itsite') <span class="text-danger small d-block">{{ $message }}</span> @enderror
-                        </div> --}}
-                        <hr class="my-4">
-                        {{-- Bagian 4: Catatan Umum --}}
-                        <div class="mb-3">
-                            <label for="remarks_overall_create" class="form-label">Catatan Umum Pengajuan</label>
-                            <textarea wire:model.defer="remarks" id="remarks_overall_create" class="form-control @error('remarks') is-invalid @enderror" rows="2" placeholder="Catatan umum untuk seluruh pengajuan..."></textarea>
-                            @error('remarks') <span class="text-danger small">{{ $message }}</span> @enderror
-                        </div>
-            
-                    </div>
-                    <div class="card-footer text-end">
-                        <button type="button" wire:click="resetFormAndLoadStandards" class="btn btn-warning">
-                            <i class="fas fa-sync-alt me-1"></i> Reset ke Standar
-                        </button>
-                        <button type="submit" class="btn btn-primary">
-                            <span wire:loading.remove wire:target="submitRequest">Ajukan Permintaan</span>
-                            <span wire:loading wire:target="submitRequest">
-                                <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                                Mengajukan...
-                            </span>
-                        </button>
-                    </div>
-                </form>
-            {{-- @endif --}}
-        @else
-        <div class="container-fluid py-4">
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-12">
-                        <div class="alert alert-danger text-center py-4">
-                            <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
-                            <h5 class="mb-2">Anda tidak bisa mengjukan Asset</h5>
-                            <p class="mb-0">Untuk jabatan Anda saat ini belum tersedia standarisasi asset.</p>
-                            <p class="mb-0">Atau Standarisasi Asset sudah terpenuhi!</p>
-                        </div>
+                        </details>
                     </div>
                 </div>
             </div>
-        </div>   
-        @endif
-    @endif
-    
-</div>
 
-@push('scripts')
-<script>
-    document.addEventListener('livewire:load', function () {
-        // Untuk mereset file input secara manual jika diperlukan setelah submit berhasil
-        window.Livewire.on('file-inputs-reset', () => {
-            const fileInputs = ['strukturOrganisasiFile_create', 'otherSupportingDocumentFile_create'];
-            fileInputs.forEach(id => {
-                const inputElement = document.getElementById(id);
-                if (inputElement) {
-                    inputElement.value = null;
-                }
-            });
-        });
-    });
-</script>
-@endpush
+            {{-- Kanan: ringkasan & kirim --}}
+            <div class="col-lg-4">
+                <div class="card position-sticky" style="top: 1rem">
+                    <div class="card-header pb-2"><h5 class="card-title mb-0">Ringkasan</h5></div>
+                    <div class="card-body">
+                        <dl class="row small mb-3">
+                            <dt class="col-5 text-muted fw-normal">Pemohon</dt><dd class="col-7">{{ $user->name }}</dd>
+                            <dt class="col-5 text-muted fw-normal">Site</dt><dd class="col-7">{{ $user->jobsite->code ?? '-' }}</dd>
+                            <dt class="col-5 text-muted fw-normal">Jumlah item</dt><dd class="col-7">{{ count($items) }} jenis · {{ $totalUnits }} unit</dd>
+                        </dl>
+
+                        <h6 class="small text-uppercase text-muted mb-2">Alur persetujuan</h6>
+                        <ol class="small ps-3 mb-3">
+                            <li class="mb-1">Validasi item oleh <strong>tim IT site</strong></li>
+                            @forelse ($approvalPreview as $p)
+                                <li class="mb-1">{{ $p['role'] }} <span class="text-muted">· {{ $p['user']->name }}</span></li>
+                            @empty
+                                <li class="text-danger">Belum ada alur persetujuan</li>
+                            @endforelse
+                        </ol>
+
+                        <button type="button" wire:click="submitRequest" class="btn btn-primary w-100" wire:loading.attr="disabled" wire:target="submitRequest,ba_damage,ba_budget_outside" @disabled($workflowWarning)>
+                            <span wire:loading.remove wire:target="submitRequest"><i class="bx bx-send me-1"></i>Kirim pengajuan</span>
+                            <span wire:loading wire:target="submitRequest"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengirim...</span>
+                        </button>
+                        <small class="d-block text-muted text-center mt-2">Anda akan menerima email konfirmasi.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    @endif
+</div>

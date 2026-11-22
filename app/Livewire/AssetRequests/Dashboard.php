@@ -2,127 +2,146 @@
 
 namespace App\Livewire\AssetRequests;
 
-use Livewire\Component;
+use App\Livewire\Dashboard\Concerns\PendingApprovals;
 use App\Models\AssetRequest;
-use OwenIt\Auditing\Models\Audit; // Import model Audit
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Livewire\Attributes\Url;
+use Livewire\Component;
 use Livewire\WithPagination;
 
+/**
+ * Dashboard pengajuan aset: satu tempat untuk
+ *  - "Perlu tindakan saya" (approval giliran saya + validasi IT di site saya),
+ *  - "Pengajuan saya",
+ *  - "Semua pengajuan" (IT / admin / pengelola pengajuan).
+ */
 class Dashboard extends Component
 {
-    use WithPagination;
+    use WithPagination, PendingApprovals;
 
-    /**
-     * Properti untuk mengontrol tab yang aktif untuk user IT.
-     * 'requests', 'logs', atau 'history'.
-     */
-    public $activeTab = 'requests';
+    /** Urutan tahap pengajuan: status => [label singkat, nomor tahap (1-5)]. */
+    public const STAGES = [
+        'Pending IT Item Validation' => ['Validasi IT', 1],
+        'Pending Approval' => ['Persetujuan', 2],
+        'Pending PR & Accounting Number' => ['Pembelian (PR)', 3],
+        'Pending PO' => ['Pembelian (PO)', 3],
+        'Pending QC' => ['Cek barang (QC)', 4],
+        'Pending Asset Mutation' => ['Pengiriman aset', 4],
+        'Completed' => ['Selesai', 5],
+        'Close' => ['Ditutup', 5],
+        'Rejected' => ['Ditolak', 5],
+    ];
+    public const CLOSED = ['Completed', 'Close', 'Rejected'];
 
-    public $search = '';
     protected $paginationTheme = 'bootstrap';
 
-    // Listener untuk me-refresh dashboard dari komponen lain
+    #[Url(as: 'tab')]
+    public $tab = '';
+    #[Url(as: 'q')]
+    public $search = '';
+    #[Url(as: 'status')]
+    public $statusFilter = 'active'; // active | closed | <status>
+
     protected $listeners = ['refreshDashboard' => '$refresh'];
 
-    /**
-     * Mengubah tab yang aktif.
-     */
-    public function changeTab($tabName)
+    public function mount()
     {
-        $this->activeTab = $tabName;
-        $this->resetPage(); // Reset pagination saat berganti tab
+        if (!in_array($this->tab, ['action', 'mine', 'all'], true)) {
+            $this->tab = $this->actionCount() > 0 ? 'action' : 'mine';
+        }
     }
 
-    public function updatedSearch()
+    public function setTab($tab)
     {
+        $this->tab = in_array($tab, ['action', 'mine', 'all'], true) ? $tab : 'mine';
         $this->resetPage();
+    }
+
+    public function updatingSearch() { $this->resetPage(); }
+    public function updatingStatusFilter() { $this->resetPage(); }
+
+    protected function canSeeAll(): bool
+    {
+        $user = Auth::user();
+
+        return $user->isItStaff() || $user->can('Manajement Request') || $user->hasRole(['Administrator IT', 'Administrator']);
+    }
+
+    /** Pengajuan yang menunggu validasi IT di site user (khusus tim IT). */
+    protected function itValidationQuery()
+    {
+        $user = Auth::user();
+        if (!$user->isItStaff() || !$user->jobsite_id) {
+            return AssetRequest::whereRaw('1 = 0');
+        }
+
+        return AssetRequest::where('status', 'Pending IT Item Validation')->where('jobsite_id', $user->jobsite_id);
+    }
+
+    protected function actionCount(): int
+    {
+        return $this->myAssetRequestApprovals(Auth::id())->count() + $this->itValidationQuery()->count();
+    }
+
+    protected function applyFilters($query)
+    {
+        return $query
+            ->when($this->statusFilter === 'active', fn ($q) => $q->whereNotIn('status', self::CLOSED))
+            ->when($this->statusFilter === 'closed', fn ($q) => $q->whereIn('status', self::CLOSED))
+            ->when($this->statusFilter && !in_array($this->statusFilter, ['active', 'closed'], true), fn ($q) => $q->where('status', $this->statusFilter))
+            ->when($this->search, function ($q) {
+                $term = '%' . $this->search . '%';
+                // Dikelompokkan agar filter status tetap berlaku.
+                $q->where(fn ($w) => $w->where('request_number', 'like', $term)
+                    ->orWhere('purpose', 'like', $term)
+                    ->orWhereHas('requester', fn ($r) => $r->where('name', 'like', $term)->orWhere('nik', 'like', $term)));
+            });
     }
 
     public function render()
     {
         $user = Auth::user();
-        $isItUser = $user->hasAnyRole(['Administrator IT','Administrator','IT']); // Asumsi menggunakan Spatie/Permission, now using array
-
-        $requests = null;
-        $auditLogs = null;
-        $historyRequests = null; // Properti baru untuk history
-
-        $requestsAwaitingMyActionQuery = AssetRequest::query();
-        if ($user) {
-            // PERBAIKAN: Logika disederhanakan untuk hanya menggunakan tabel 'approvals'
-            $pendingStatuses = ['Pending IT Item Validation', 'Pending Approval'];
-            
-            $requestsAwaitingMyActionQuery
-                ->whereIn('status', $pendingStatuses)
-                ->whereHas('approvals', function ($approvalQuery) use ($user) {
-                    $approvalQuery->where('status', 'Pending')
-                                  ->where('approver_user_id', $user->id)
-                                  ->where('step_order', function ($stepSubQuery) {
-                                        $stepSubQuery->selectRaw('MIN(step_order)')
-                                                     ->from('asset_request_approvals as sub_approvals')
-                                                     ->whereColumn('sub_approvals.asset_request_id', 'asset_request_approvals.asset_request_id')
-                                                     ->where('sub_approvals.status', 'Pending');
-                                  });
-                 });
-        } else {
-            $requestsAwaitingMyActionQuery->whereRaw('1 = 0'); // Jika tidak ada user, jangan tampilkan apa-apa
+        $canSeeAll = $this->canSeeAll();
+        if ($this->tab === 'all' && !$canSeeAll) {
+            $this->tab = 'mine';
         }
-        
-        $requestsAwaitingMyAction = $requestsAwaitingMyActionQuery
-                                      ->with('requester:id,name')
-                                      ->orderBy('request_date', 'asc')
-                                      ->get();
-        // Status-status yang dianggap masih aktif/pending
-        $activeStatuses = [
-            'Draft', 'Pending IT Item Validation', 'Pending Approval',
-            'Pending PR & Accounting Number', 'Pending PO Number', 'Processing'
+
+        $with = [
+            'requester:id,name,nik', 'jobsite:id,code',
+            'approvals' => fn ($q) => $q->with('approver:id,name'),
         ];
-        
 
-        if ($isItUser) {
-            $requestsQuery = AssetRequest::query()->whereIn('status', $activeStatuses)->with(['requester', 'jobsite', 'approvals.approver']);
-            if (!empty($this->search) && $this->activeTab === 'requests') {
-                $requestsQuery->where('request_number', 'like', '%' . $this->search . '%')
-                              ->orWhereHas('requester', fn($q) => $q->where('name', 'like', '%' . $this->search . '%'));
-            }
-            $requests = $requestsQuery->orderBy('request_date', 'desc')->paginate(10, ['*'], 'requestsPage');
+        // Tab "Perlu tindakan": approval giliran saya + validasi IT (tanpa paginasi, biasanya sedikit)
+        $myApprovalRequestIds = $this->myAssetRequestApprovals($user->id)->pluck('asset_request_id');
+        $actionRequests = AssetRequest::query()
+            ->where(fn ($q) => $q->whereIn('id', $myApprovalRequestIds)
+                ->orWhereIn('id', $this->itValidationQuery()->select('id')))
+            ->with($with)->withCount('items')
+            ->orderBy('request_date')
+            ->get();
 
-            // Data untuk tab "History Pengajuan"
-            $historyQuery = AssetRequest::query()->whereNotIn('status', $activeStatuses)->with(['requester', 'jobsite']);
-            if (!empty($this->search) && $this->activeTab === 'history') {
-                $historyQuery->where('request_number', 'like', '%' . $this->search . '%')
-                              ->orWhereHas('requester', fn($q) => $q->where('name', 'like', '%' . $this->search . '%'));
-            }
-            $historyRequests = $historyQuery->orderBy('updated_at', 'desc')->paginate(10, ['*'], 'historyPage');
-
-            // Data untuk tab "Log Audit"
-            $auditLogsQuery = Audit::query()
-                ->whereIn('auditable_type', [AssetRequest::class, \App\Models\AssetRequestItem::class])
-                ->with('user:id,name');
-            if (!empty($this->search) && $this->activeTab === 'logs') {
-                $auditLogsQuery->where(function($q) {
-                    $q->where('event', 'like', '%' . $this->search . '%')
-                      ->orWhereHas('user', fn($sq) => $sq->where('name', 'like', '%' . $this->search . '%'));
-                });
-            }
-            $auditLogs = $auditLogsQuery->orderBy('created_at', 'desc')->paginate(10, ['*'], 'logsPage');
-
-        } else {
-            $requestsQuery = AssetRequest::where('requester_user_id', $user->id)
-                ->with(['requester', 'jobsite', 'approvals.approver']);
-            if (!empty($this->search)) {
-                $requestsQuery->where('request_number', 'like', '%' . $this->search . '%');
-            }
-            $requests = $requestsQuery->orderBy('request_date', 'desc')->paginate(10, ['*'], 'requestsPage');
+        $list = null;
+        if ($this->tab !== 'action') {
+            $base = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where('requester_user_id', $user->id);
+            $list = $this->applyFilters($base)
+                ->with($with)->withCount('items')
+                ->orderByDesc('request_date')->orderByDesc('id')
+                ->paginate(10);
         }
+
+        $statusSource = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where('requester_user_id', $user->id);
+        $statusCounts = $statusSource->select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
 
         return view('livewire.asset-requests.dashboard', [
-            'isItUser' => $isItUser,
-            'requests' => $requests,
-            'auditLogs' => $auditLogs,
-            'historyRequests' => $historyRequests,
-            'requestsAwaitingMyAction' => $requestsAwaitingMyAction,
+            'actionRequests' => $actionRequests,
+            'myApprovalRequestIds' => $myApprovalRequestIds->all(),
+            'list' => $list,
+            'canSeeAll' => $canSeeAll,
+            'statusCounts' => $statusCounts,
+            'activeCount' => $statusCounts->except(self::CLOSED)->sum(),
+            'closedCount' => $statusCounts->only(self::CLOSED)->sum(),
+            'stages' => self::STAGES,
         ]);
-   
     }
 }

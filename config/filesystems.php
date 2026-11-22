@@ -33,8 +33,9 @@ return [
         'local' => [
             'driver' => 'local',
             'root' => storage_path('app/private'),
-            
-            'serve' => true,
+
+            // Dimatikan: URL /storage/{path} dipakai StorageFileController (disk public + wajib login).
+            'serve' => false,
             'throw' => false,
             'report' => false,
         ],

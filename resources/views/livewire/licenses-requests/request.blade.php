@@ -18,6 +18,12 @@
                                 {{ session('message') }}
                             </div>
                         @endif
+                        @if ($workflowWarning)
+                            <div class="alert alert-warning d-flex gap-2" role="alert">
+                                <i class="bx bx-error fs-4 flex-shrink-0"></i>
+                                <div><strong>Pengajuan belum bisa dikirim.</strong><br>{{ $workflowWarning }}</div>
+                            </div>
+                        @endif
                         @if (session()->has('error'))
                             <div class="alert alert-danger mt-3" role="alert">
                                 {{ session('error') }}

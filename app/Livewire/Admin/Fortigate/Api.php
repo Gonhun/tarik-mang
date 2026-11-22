@@ -34,15 +34,22 @@ class Api extends Component
     {
         $this->isLoading = true;
         $this->errorMessage = '';
-        $token = 'w4wxhNfnj3zfxdp4Gx0gx8pb8xcwfn';
-        $webhookUrl = 'https://192.168.4.1:8443/api/v2/'.$value;
+        // $value berasal dari browser: batasi ke karakter path API yang wajar.
+        $value = (string) $value;
+        if (!preg_match('#^[A-Za-z0-9_\-/]+$#', $value) || str_contains($value, '..')) {
+            $this->errorMessage = 'Path API tidak valid.';
+            $this->isLoading = false;
+            return;
+        }
+        $token = config('services.fortigate.token');
+        $webhookUrl = rtrim(config('services.fortigate.url'), '/') . '/' . ltrim($value, '/');
         $this->groups = [];
         try {
 
             // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $token,
-            ])->withoutVerifying()->timeout(60)->get($webhookUrl);
+            ])->withOptions(['verify' => config('services.fortigate.verify_ssl')])->timeout(60)->get($webhookUrl);
 
             if ($response->successful()) {
                 $data = $response->json();

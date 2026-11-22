@@ -32,6 +32,11 @@ class ShowAssetTransaction extends Component
     public $it_selected_stock_asset_id = null;
     public $destinationCostCenter,$fromCostCenter;
 
+    // Perbaikan approval (admin): ganti approver satu tahap
+    public $reassignApprovalId = null;
+    public $reassignSearch = '';
+    public $reassignUserId = null;
+
     
 
 
@@ -41,9 +46,10 @@ class ShowAssetTransaction extends Component
     public function mount(AssetTransaction $transaction)
     {
         $this->transaction = $transaction->load([
-            'fromUser:id,name,nik', 'toUser:id,name,nik', 'creator:id,name,department_id',
+            'fromUser:id,name,nik', 'toUser:id,name,nik', 'creator:id,name,department_id,whatsapp',
             'fromJobsite:id,name', 'toJobsite:id,name',
             'items.asset.assetType', 'items.asset.assetBrand', 'items.asset.assetSeries',
+            'items.asset.jobsite:id,code,name', 'items.asset.holder:id,name,nik',
             'approvals.approver:id,name', 'approvals.actionBy:id,name'
         ]);
        
@@ -65,9 +71,18 @@ class ShowAssetTransaction extends Component
      */
     public function canApprove(AssetTransactionApproval $approval): bool
     {
-        // Kondisi 1: Tahap ini harus 'Pending'.
-        // Kondisi 2: User yang login harus sama dengan user approver yang ditunjuk.
-        return $approval->status === 'Pending' && Auth::id() == $approval->approver_user_id;
+        // 1. Approval milik transaksi yang sedang dibuka.
+        // 2. Tahap masih Pending dan transaksi belum selesai/ditolak.
+        // 3. User yang login adalah approver yang ditunjuk.
+        // 4. Giliran: tidak ada tahap sebelumnya yang masih Pending.
+        return (int) $approval->asset_transaction_id === (int) $this->transaction->id
+            && $approval->status === 'Pending'
+            && !in_array($this->transaction->fresh()->status, ['Completed', 'Rejected', 'Cancelled'], true)
+            && Auth::id() == $approval->approver_user_id
+            && !AssetTransactionApproval::where('asset_transaction_id', $approval->asset_transaction_id)
+                ->where('step_order', '<', $approval->step_order)
+                ->where('status', 'Pending')
+                ->exists();
     }
 
     /**
@@ -107,6 +122,9 @@ class ShowAssetTransaction extends Component
     
     public function openApprovalModal(int $approvalId, string $action)
     {
+        if (!in_array($action, ['approve', 'reject'], true)) {
+            return;
+        }
         $approval = AssetTransactionApproval::find($approvalId);
         if (!$approval || !$this->canApprove($approval)) {
             session()->flash('error', 'Anda tidak berhak melakukan aksi ini atau tahapan tidak valid.');
@@ -229,7 +247,7 @@ class ShowAssetTransaction extends Component
     {
         // Ambil data user approver
         $approver = $approval->approver;
-        if (!$approver || !$approver->phone) {
+        if (!$approver || !$approver->whatsapp) {
             Log::warning('Gagal kirim WA: Approver tidak punya nomor telepon.', ['approval_id' => $approval->id]);
             return;
         }
@@ -243,7 +261,12 @@ class ShowAssetTransaction extends Component
             . "Silakan login ke aplikasi AMS untuk melakukan approval."
             . "ams.binasaranasukses.co.id";
 
-            sendMessageWithWhatsApp($approver->phone, $message);
+            $message .= "\n" . route('asset.mutasi-status', $transaction->id);
+            try {
+                sendMessageWithWhatsApp($approver->whatsapp, $message);
+            } catch (\Throwable $e) {
+                Log::warning('Gagal kirim WA approver: ' . $e->getMessage());
+            }
     }
 
     /**
@@ -253,7 +276,7 @@ class ShowAssetTransaction extends Component
     {
         // Ambil data user pemohon/requester
         $requester = $transaction->creator;
-        if (!$requester || !$requester->phone) {
+        if (!$requester || !$requester->whatsapp) {
             Log::warning('Gagal kirim WA: Requester tidak punya nomor telepon.', ['transaction_id' => $transaction->id]);
             return;
         }
@@ -266,14 +289,43 @@ class ShowAssetTransaction extends Component
             . "Status: {$transaction->status}\n\n"
             . "Cek detail di aplikasi AMS.";
 
-        sendMessageWithWhatsApp($requester->phone, $message);
+        sendMessageWithWhatsApp($requester->whatsapp, $message);
     }
 
     /**
      * Helper untuk mengirim WhatsApp (dummy, ganti dengan integrasi API WA sebenarnya).
      */
     
-    protected function processFullyApprovedRequest(AssetTransaction $transaction) { 
+    protected function processFullyApprovedRequest(AssetTransaction $transaction) {
+        $transaction->loadMissing('items.asset');
+
+        // Disposal / kehilangan: pulihkan aset bila ditolak, hapus buku bila disetujui penuh.
+        if ($transaction->transaction_type === 'DISPOSED') {
+            if ($transaction->status === 'Rejected') {
+                \App\Support\AssetDisposal::restoreAfterRejection($transaction);
+            } elseif (in_array($transaction->status, ['Approved', 'Completed'], true)) {
+                \App\Support\AssetDisposal::completeApproval($transaction);
+            }
+            return;
+        }
+
+        // Mutasi: aset baru pindah site saat site tujuan konfirmasi terima (halaman Mutasi).
+        // Disetujui -> tetap "Pending Mutation" menunggu pelepasan. Ditolak -> pulihkan status & pemegang semula.
+        if ($transaction->transaction_type === 'MUTATION') {
+            if ($transaction->status === 'Rejected') {
+                foreach ($transaction->items as $item) {
+                    if ($item->asset && $item->asset->status === 'Pending Mutation') {
+                        $meta = is_array($item->metadata) ? $item->metadata : [];
+                        $item->asset->update([
+                            'status' => $meta['previous_status'] ?? 'Free',
+                            'holder_user_id' => array_key_exists('previous_holder_user_id', $meta) ? $meta['previous_holder_user_id'] : $item->asset->holder_user_id,
+                        ]);
+                    }
+                }
+            }
+            return;
+        }
+
         if ($transaction->status === 'Rejected') {
             // Jika transaksi di-reject, update status aset terkait (jika perlu)
             foreach ($transaction->items as $item) {
@@ -310,8 +362,128 @@ class ShowAssetTransaction extends Component
         $transaction->refresh();
      }
 
+    // ------------------------------------------------------------------
+    // Perbaikan approval transaksi yang sudah berjalan (khusus admin)
+    // ------------------------------------------------------------------
+
+    public function applyCurrentWorkflow()
+    {
+        try {
+            $plan = \App\Support\TransactionApprovalRepair::applyWorkflow($this->transaction, Auth::user());
+        } catch (\RuntimeException $e) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa diterapkan', 'text' => $e->getMessage()]);
+            return;
+        }
+        $this->transaction->refresh();
+        $this->dispatch('swal:success', [
+            'title' => 'Approval diperbarui',
+            'text' => count($plan) . ' tahap dibuat. Menunggu ' . $plan[0]['user']->name . ' (notifikasi WhatsApp dikirim bila nomor tersedia).',
+        ]);
+    }
+
+    public function openReassign($approvalId)
+    {
+        abort_unless(\App\Support\TransactionApprovalRepair::canManage(Auth::user()), 403);
+        $approval = AssetTransactionApproval::where('asset_transaction_id', $this->transaction->id)->find($approvalId);
+        if (!$approval || $approval->status !== 'Pending') {
+            return;
+        }
+        $this->reassignApprovalId = $approval->id;
+        $this->reassignUserId = null;
+        $this->reassignSearch = '';
+        $this->resetValidation();
+    }
+
+    public function closeReassign()
+    {
+        $this->reset(['reassignApprovalId', 'reassignUserId', 'reassignSearch']);
+    }
+
+    public function chooseReassignUser($userId)
+    {
+        $this->reassignUserId = (int) $userId;
+        $this->reassignSearch = '';
+    }
+
+    public function submitReassign()
+    {
+        $this->validate(['reassignUserId' => 'required|exists:users,id'], ['reassignUserId.required' => 'Pilih approver pengganti.']);
+        $approval = AssetTransactionApproval::where('asset_transaction_id', $this->transaction->id)->find($this->reassignApprovalId);
+        if (!$approval) {
+            return;
+        }
+
+        try {
+            \App\Support\TransactionApprovalRepair::reassign($approval, User::findOrFail($this->reassignUserId), Auth::user());
+        } catch (\RuntimeException $e) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa diganti', 'text' => $e->getMessage()]);
+            return;
+        }
+
+        $name = User::find($this->reassignUserId)->name;
+        $this->closeReassign();
+        $this->transaction->refresh();
+        $this->dispatch('swal:success', ['title' => 'Approver diganti', 'text' => "Tahap {$approval->step_order} sekarang ditangani {$name}."]);
+    }
+
+    /**
+     * Pesan bila transaksi yang masih berjalan tidak punya approver lengkap (data lama / workflow belum diatur).
+     */
+    protected function approvalProblem(): ?string
+    {
+        if (in_array($this->transaction->status, ['Completed', 'Rejected', 'Cancelled', 'Pending Release', 'Delivery', 'Pending Inspection'], true)) {
+            return null;
+        }
+        $approvals = $this->transaction->approvals()->get(['id', 'status', 'approver_user_id', 'step_order']);
+        if ($approvals->isEmpty()) {
+            return 'Transaksi ini tidak memiliki tahapan approval (workflow belum diatur saat dibuat). ' . \App\Support\Workflow::ADMIN_HINT;
+        }
+        $orphan = $approvals->where('status', 'Pending')->whereNull('approver_user_id')->sortBy('step_order')->first();
+        if ($orphan) {
+            return "Tahap {$orphan->step_order} belum punya approver, sehingga transaksi tidak bisa disetujui. " . \App\Support\Workflow::ADMIN_HINT;
+        }
+        return null;
+    }
+
     public function render()
     {
-        return view('livewire.asset-mutations.show-asset-transaction');
+        $this->transaction->load(['approvals.approver:id,name', 'approvals.actionBy:id,name']);
+        $approvals = $this->transaction->approvals->sortBy('step_order')->values();
+        $current = $approvals->firstWhere('status', 'Pending');
+
+        // Panel perbaikan approval untuk admin.
+        $canRepair = \App\Support\TransactionApprovalRepair::canManage(Auth::user())
+            && in_array($this->transaction->transaction_type, ['DISPOSED', 'MUTATION'], true)
+            && !in_array($this->transaction->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true);
+        $repairPlan = null;
+        $repairPlanError = null;
+        if ($canRepair && \App\Support\TransactionApprovalRepair::canReapply($this->transaction)) {
+            try {
+                $repairPlan = \App\Support\TransactionApprovalRepair::plan($this->transaction);
+            } catch (\App\Support\WorkflowNotConfigured $e) {
+                $repairPlanError = $e->getMessage();
+            }
+        }
+        $reassignOptions = collect();
+        if ($this->reassignApprovalId && strlen(trim($this->reassignSearch)) >= 2) {
+            $term = '%' . trim($this->reassignSearch) . '%';
+            $reassignOptions = User::with('jobsite:id,code')
+                ->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('nik', 'like', $term))
+                ->orderBy('name')->limit(8)->get(['id', 'name', 'nik', 'jobsite_id']);
+        }
+
+        return view('livewire.asset-mutations.show-asset-transaction', [
+            'approvalProblem' => $this->approvalProblem(),
+            'canRepair' => $canRepair,
+            'repairPlan' => $repairPlan,
+            'repairPlanError' => $repairPlanError,
+            'reassignOptions' => $reassignOptions,
+            'reassignUser' => $this->reassignUserId ? User::find($this->reassignUserId, ['id', 'name', 'nik']) : null,
+            'approvals' => $approvals,
+            'currentApproval' => in_array($this->transaction->status, ['Rejected', 'Cancelled', 'Completed'], true) ? null : $current,
+            // Hanya approver yang sedang giliran yang mendapat tombol (dicek ulang di server saat submit).
+            'myTurnApprovalId' => $current && $this->canApprove($current) ? $current->id : null,
+            'modalApproval' => $this->isApprovalModalOpen && $this->currentApprovalId ? $approvals->firstWhere('id', $this->currentApprovalId) : null,
+        ]);
     }
 }

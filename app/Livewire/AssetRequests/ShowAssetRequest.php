@@ -55,6 +55,7 @@ class ShowAssetRequest extends Component
      */
     public function mount(AssetRequest $assetRequest)
     {
+        abort_unless(Auth::user()->can('view-asset-request', $assetRequest), 403);
         $this->isAdmin = Auth::user()->hasRole(['Administrator IT', 'Administrator']);
         $this->assetRequest = $assetRequest->load([
             'requester.jobsite',
@@ -89,8 +90,19 @@ class ShowAssetRequest extends Component
         $this->initializeItemDecisions();
     }
 
+    /**
+     * Ambil approval milik pengajuan ini saja (ID dari browser tidak boleh menunjuk pengajuan lain).
+     */
+    protected function findOwnApproval($approvalId, array $with = []): ?AssetRequestApproval
+    {
+        return AssetRequestApproval::with($with)
+            ->where('asset_request_id', $this->assetRequest->id)
+            ->find($approvalId);
+    }
+
     public function openModalUpdatePic($id)
     {
+        abort_unless($this->isAdmin && $this->findOwnApproval($id), 403, 'Aksi tidak diizinkan.');
         $this->idToUpdate = $id;
         $this->isUpdatePIcModalOpen = true;
         $this->site_option = Jobsite::pluck('id', 'code')->toArray();
@@ -145,11 +157,22 @@ class ShowAssetRequest extends Component
     }
     protected function findAvailableStock(AssetRequestItem $item)
     {
-        // Logika untuk mencari aset di stok yang cocok dengan item permintaan
+        // Aset Free bertipe sama yang belum dipilih item pengajuan lain yang masih berjalan.
+        // Urutan: seri sama dulu, lalu site pemohon dulu. Dibatasi agar halaman tetap ringan.
+        $reserved = AssetRequestItem::whereNotNull('assigned_asset_id')
+            ->where('id', '!=', $item->id)
+            ->whereHas('assetRequest', fn ($q) => $q->whereNotIn('status', ['Completed', 'Close', 'Rejected']))
+            ->pluck('assigned_asset_id');
+
         return Asset::where('status', 'Free')
             ->where('asset_type_id', $item->asset_type_id)
-            ->with('jobsite:id,name')
-            ->get();
+            ->whereNotIn('id', $reserved)
+            ->with(['jobsite:id,code,name', 'assetSeries:id,name'])
+            ->orderByRaw('case when asset_series_id = ? then 0 else 1 end', [(int) $item->asset_series_id])
+            ->orderByRaw('case when jobsite_id = ? then 0 else 1 end', [(int) $this->assetRequest->jobsite_id])
+            ->orderBy('asset_number')
+            ->limit(30)
+            ->get(['id', 'asset_number', 'serial_number', 'jobsite_id', 'asset_series_id']);
     }
 
     protected function loadStockAssetsForItem($itemId)
@@ -159,8 +182,23 @@ class ShowAssetRequest extends Component
             $this->availableStockAssets[$itemId] = $this->findAvailableStock($requestItem);
         }
     }
-    public function SendWa($user, $data)
+    public function SendWa($approvalId)
     {
+        // Data penerima & isi diambil dari server, bukan dari browser.
+        $approval = $this->findOwnApproval($approvalId, ['approver.karyawans']);
+        abort_unless($approval && $approval->status === 'Pending' && $approval->approver, 403, 'Aksi tidak diizinkan.');
+
+        $email = $approval->approver->karyawans->Email ?? null;
+        if (!$email) {
+            $this->dispatch('swal:error', [
+                'title' => 'Error!',
+                'text' => "Email approver tidak ditemukan.",
+            ]);
+            return;
+        }
+
+        $user = ['name' => $approval->approver->name];
+        $data = $this->assetRequest->loadMissing('requester')->toArray();
 
         $messageBody = "Halo *{$user['name']}* \n";
         $messageBody .= "Ada pengajuan yang perlu anda action di AMS\n";
@@ -173,7 +211,7 @@ class ShowAssetRequest extends Component
             'approver' => $user['name'],
             'draft' => $data
         ];
-        $isSuccess = Mail::Mailer('smtp2')->to($user['karyawans']['Email'])->send(new MailAssetRequest($draftData));
+        $isSuccess = Mail::Mailer('smtp2')->to($email)->send(new MailAssetRequest($draftData));
         // dd($isSuccess);
 
 
@@ -225,8 +263,22 @@ class ShowAssetRequest extends Component
         $fulfillmentType = $decision['fulfillment_type'];
         $assignedAssetId = null;
 
+        if ($item->asset_request_id != $this->assetRequest->id || $item->it_approval_status !== 'Pending') {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa disimpan', 'text' => 'Item ini sudah diputuskan atau bukan bagian pengajuan ini.']);
+            return;
+        }
+
         if ($fulfillmentType === 'stock') {
             $stockAsset = Asset::find($decision['selected_stock_asset_id']);
+            $alreadyReserved = $stockAsset && AssetRequestItem::where('assigned_asset_id', $stockAsset->id)
+                ->where('id', '!=', $item->id)
+                ->whereHas('assetRequest', fn ($q) => $q->whereNotIn('status', ['Completed', 'Close', 'Rejected']))
+                ->exists();
+            if (!$stockAsset || $stockAsset->status !== 'Free' || $alreadyReserved) {
+                $this->addError("itemDecisions.{$itemId}.selected_stock_asset_id", 'Aset ini sudah tidak tersedia (bukan Free atau sudah dipilih pengajuan lain). Pilih aset lain.');
+                $this->loadStockAssetsForItem($itemId);
+                return;
+            }
             $assignedAssetId = $stockAsset->id;
             $fulfillmentType = ($stockAsset->jobsite_id == $this->assetRequest->jobsite_id) ? 'STOCK_LOCAL' : 'STOCK_MUTATION';
             $AssetApproval = AssetRequestApproval::where('asset_request_id', $item->asset_request_id)
@@ -244,14 +296,30 @@ class ShowAssetRequest extends Component
             'fulfillment_type' => $fulfillmentType,
             'assigned_asset_id' => $assignedAssetId,
         ]);
-        $assetreq = AssetRequest::find($item->asset_request_id);
-        $assetreq->update([
-            'status' => 'Pending Approval'
-        ]);
+        // Lanjut ke tahap persetujuan HANYA bila semua item sudah divalidasi IT.
+        $remaining = AssetRequestItem::where('asset_request_id', $item->asset_request_id)->where('it_approval_status', 'Pending')->count();
+        $autoCompleted = false;
+        if ($remaining === 0) {
+            AssetRequest::find($item->asset_request_id)->update(['status' => 'Pending Approval']);
+            $this->assetRequest->refresh();
+            // Semua tahap sudah disetujui otomatis (pemohon = approver) -> langsung proses.
+            if ($this->assetRequest->approvals()->exists() && !$this->assetRequest->approvals()->where('status', '!=', 'Approved')->exists()) {
+                try {
+                    $this->processFullyApprovedRequest();
+                    $autoCompleted = true;
+                } catch (\App\Support\WorkflowNotConfigured $e) {
+                    $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $e->getMessage()]);
+                }
+            }
+        }
         $this->assetRequest->refresh();
         $this->dispatch('swal:success', [
-            'title' => 'Berhasil!',
-            'text' => "Keputusan untuk item #{$itemId} berhasil disimpan.",
+            'title' => 'Keputusan tersimpan',
+            'text' => $autoCompleted
+                ? 'Semua item divalidasi dan seluruh tahap sudah disetujui otomatis. Pengajuan langsung diproses.'
+                : ($remaining === 0
+                ? 'Semua item sudah divalidasi. Pengajuan lanjut ke tahap persetujuan.'
+                : "Masih ada {$remaining} item yang perlu divalidasi."),
         ]);
 
     }
@@ -272,6 +340,7 @@ class ShowAssetRequest extends Component
         $newPurchaseItems = $this->assetRequest->items->where('fulfillment_type', 'NEW_PURCHASE');
         $localStockItems = $this->assetRequest->items->where('fulfillment_type', 'STOCK_LOCAL');
 
+        try {
         DB::transaction(function () use ($mutationItems, $newPurchaseItems, $localStockItems) {
 
             // ================================================================
@@ -327,6 +396,11 @@ class ShowAssetRequest extends Component
             // Update status pengajuan utama
             $this->assetRequest->update(['status' => $nextStatus]);
         });
+        } catch (\App\Support\WorkflowNotConfigured $e) {
+            // Workflow/approver belum lengkap: semua perubahan dibatalkan, beri tahu user.
+            $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $e->getMessage()]);
+            return;
+        }
         $this->dispatch('swal:success', [
             'title' => 'Berhasil!',
             'text' => "Validasi IT selesai. Pengajuan dilanjutkan ke tahap berikutnya.",
@@ -337,66 +411,28 @@ class ShowAssetRequest extends Component
     }
     protected function generateMutationApprovalSteps(AssetTransaction $transaction)
     {
-        // Cari user berdasarkan peran. Anda perlu logika untuk ini.
-        // Asumsi Role model punya kolom 'code' atau 'name'.
-        $kasiItUser = User::whereHas('position', fn($q) => $q->where('name', 'KADEP IT'))->first();
-        $costControlUser = User::whereHas('position', fn($q) => $q->where('name', 'KASI CC'))->first();
-        $originPicUser = User::where('jobsite_id', $transaction->from_jobsite_id)->whereHas('position', fn($q) => $q->where('name', 'Staff IT'))->first(); // PIC Jobsite Asal
-        $destinationPicUser = User::where('jobsite_id', $transaction->to_jobsite_id)->whereHas('position', fn($q) => $q->where('name', 'Staff IT'))->first(); // PIC Jobsite Tujuan
+        // Approval mutasi dari workflow MUTATION, approver dicari di site asal.
+        // Dulu approver di-hardcode dan diisi null bila tidak ditemukan, sehingga transaksi tertahan tanpa approver.
+        $plan = \App\Support\Workflow::plan('MUTATION', Auth::user()->position_id, Auth::user()->jobsite_id, $transaction->from_jobsite_id);
 
-        // Buat record untuk setiap tahap
-        $transaction->approvals()->create([
-            'step_order' => 1,
-            'approver_role_name' => 'KADEP IT',
-            'approver_user_id' => $kasiItUser ? $kasiItUser->id : null, // Fallback jika tidak ditemukan
-            'status' => 'Pending',
-        ]);
+        // Tahap yang approvernya = pembuat mutasi langsung disetujui otomatis.
+        $transaction->approvals()->createMany(\App\Support\Workflow::approvalRows($plan, Auth::id()));
+        \App\Support\TransactionApprovalRepair::finishIfFullyApproved($transaction);
 
-        $transaction->approvals()->create([
-            'step_order' => 2,
-            'approver_role_name' => 'Cost Control',
-            'approver_user_id' => $costControlUser ? $costControlUser->id : null,
-            'status' => 'Pending',
-        ]);
-        $transaction->approvals()->create([
-            'step_order' => 3,
-            'approver_role_name' => 'Staff IT',
-            'approver_user_id' => $originPicUser ? $originPicUser->id : null,
-            'status' => 'Pending',
-        ]);
-
-
-        // Tahap selanjutnya bisa jadi 'Pelepasan oleh Jobsite Asal' atau lainnya
-        // ...
-
-        // Update status utama transaksi ke status pending tahap pertama
-
-        $transaction->save();
-
-        // Kirim notifikasi WA ke Kasi IT
-        if ($kasiItUser) {
-            // Kirim notifikasi WhatsApp ke Kasi IT
-            try {
-                $waMessage = "Halo {$kasiItUser->name},\n\n"
-                    . "Terdapat permintaan mutasi aset baru yang memerlukan persetujuan Anda.\n"
-                    . "Nomor Transaksi: {$transaction->transaction_number}\n"
-                    . "Silakan cek aplikasi Asset Management untuk detail dan proses persetujuan.\n"
-                    . "ams.binasaranasukses.co.id";
-
-                // Asumsikan ada helper sendWhatsappNotification($user, $message)
-                if (function_exists('sendWhatsappNotification')) {
-                    sendMessageWithWhatsApp($kasiItUser->whatsapp, $waMessage);
-                } elseif (method_exists($kasiItUser, 'sendWhatsappNotification')) {
-                    $kasiItUser->sendWhatsappNotification($waMessage);
+        $first = \App\Support\Workflow::firstPendingUser($plan, Auth::id());
+        if ($first && $first->whatsapp) {
+            $message = "Halo {$first->name},\n\nTerdapat permintaan mutasi aset {$transaction->transaction_number} yang memerlukan persetujuan Anda.\n"
+                . 'Buka: ' . route('asset.mutasi-status', $transaction->id);
+            DB::afterCommit(function () use ($first, $message) {
+                try {
+                    sendMessageWithWhatsApp($first->whatsapp, $message);
+                } catch (\Throwable $e) {
+                    Log::warning('WA approver mutasi gagal: ' . $e->getMessage());
                 }
-                // Jika Anda menggunakan job dispatch:
-                // dispatch(new \App\Jobs\SendWhatsappNotification($kasiItUser, $waMessage));
-            } catch (\Exception $e) {
-                // Log error jika gagal kirim WA, tapi jangan hentikan proses
-                Log::error('Gagal mengirim notifikasi WA ke Kasi IT: ' . $e->getMessage());
-            }
+            });
         }
     }
+
     protected function generateTransactionNumber($typePrefix = 'TRX')
     {
         $year = date('y');
@@ -415,8 +451,9 @@ class ShowAssetRequest extends Component
     // --- LOGIKA UNTUK APPROVAL GLOBAL (SETELAH IT) ---
     public function openOverallApprovalModal($approvalId, $action)
     {
-        $approval = AssetRequestApproval::find($approvalId);
-        // abort_unless($this->canApproveOverallStep($approval), 403, 'Aksi tidak diizinkan.');
+        $approval = $this->findOwnApproval($approvalId);
+        abort_unless(in_array($action, ['approve', 'reject'], true), 400);
+        abort_unless($this->canApproveOverallStep($approval), 403, 'Aksi tidak diizinkan.');
 
         $this->currentOverallApprovalId = $approvalId;
         $this->overallApprovalAction = $action;
@@ -431,11 +468,12 @@ class ShowAssetRequest extends Component
 
     public function submitOverallApproval()
     {
-        $approval = AssetRequestApproval::with(['assetRequest.items', 'approver'])->find($this->currentOverallApprovalId);
-        // abort_unless($this->canApproveOverallStep($approval), 403, 'Aksi tidak diizinkan.');
-        // dd($approval);
+        $approval = $this->findOwnApproval($this->currentOverallApprovalId, ['assetRequest.items', 'approver']);
+        abort_unless(in_array($this->overallApprovalAction, ['approve', 'reject'], true), 400);
+        abort_unless($this->canApproveOverallStep($approval), 403, 'Aksi tidak diizinkan.');
         $this->validate(['overallApprovalNotes' => ($this->overallApprovalAction === 'reject' ? 'required|string|min:10' : 'nullable|string')]);
 
+        try {
         DB::transaction(function () use ($approval) {
             $approval->update([
                 'status' => ($this->overallApprovalAction === 'approve' ? 'Approved' : 'Rejected'),
@@ -479,62 +517,7 @@ class ShowAssetRequest extends Component
                     $isSuccess = Mail::Mailer('smtp2')->to($this->assetRequest->requester->karyawans->Email)->send(new MailAssetRequest($draftData));
 
                 } else {
-                    $mutationItems = $this->assetRequest->items->where('fulfillment_type', 'STOCK_MUTATION');
-                    $newPurchaseItems = $this->assetRequest->items->where('fulfillment_type', 'NEW_PURCHASE');
-                    $localStockItems = $this->assetRequest->items->where('fulfillment_type', 'STOCK_LOCAL');
-
-                    DB::transaction(function () use ($mutationItems, $newPurchaseItems, $localStockItems) {
-
-                        // ================================================================
-                        // PROSES UNTUK ITEM YANG MEMERLUKAN MUTASI
-                        // ================================================================
-                        if ($mutationItems->isNotEmpty()) {
-                            // Kelompokkan item mutasi berdasarkan jobsite asalnya
-                            $itemsGroupedByOrigin = $mutationItems->groupBy('assignedAsset.jobsite_id');
-
-                            foreach ($itemsGroupedByOrigin as $originJobsiteId => $items) {
-                                // Buat SATU transaksi mutasi untuk setiap jobsite asal
-                                $mutationTransaction = AssetTransaction::create([
-                                    'transaction_number' => $this->generateTransactionNumber('MT'), // Helper dengan prefix 'MT'
-                                    'transaction_type' => 'MUTATION',
-                                    'transaction_date' => now(),
-                                    'from_jobsite_id' => $originJobsiteId,
-                                    'to_jobsite_id' => $this->assetRequest->jobsite_id, // Jobsite tujuan pemohon
-                                    'notes' => "Mutasi aset untuk memenuhi Pengajuan Aset No: {$this->assetRequest->request_number}",
-                                    'status' => 'Pending Release', // Status awal mutasi: menunggu pelepasan dari site asal
-                                    'created_by_user_id' => Auth::id(),
-                                ]);
-
-                                // Tambahkan semua item ke dalam transaksi mutasi ini
-                                foreach ($items as $item) {
-                                    $mutationTransaction->items()->create(['asset_id' => $item->assigned_asset_id, 'asset_request_item_id' => $item->id,]);
-                                    // Update status aset fisik menjadi 'Pending Mutation'
-                                    $item->assignedAsset->update(['status' => 'Pending Mutation']);
-                                }
-                                $this->generateMutationApprovalSteps($mutationTransaction);
-                                // Kirim notifikasi ke PIC jobsite asal untuk melakukan pelepasan aset
-                                $originJobsite = \App\Models\Jobsite::find($originJobsiteId);
-                                $picUser = $originJobsite?->picUser; // pastikan relasi picUser ada di model Jobsite
-                                if ($picUser) {
-                                    $msg = "Halo {$picUser->name},\n\nTerdapat permintaan mutasi aset dari Jobsite *{$this->assetRequest->jobsite->code}* untuk memenuhi pengajuan aset No. *{$this->assetRequest->request_number}*.\n\nMohon untuk melakukan validasi dan proses pelepasan aset sesuai permintaan tersebut di ams.binasaranasukses.co.id. Terima kasih.";
-                                    sendMessageWithWhatsApp($picUser->whatsapp, $msg);
-                                }
-                            }
-                        }
-                        $nextStatus = 'Completed'; // Asumsi selesai jika tidak ada pembelian baru
-
-                        if ($newPurchaseItems->isNotEmpty()) {
-                            // Jika ada item yang harus dibeli baru, alur berlanjut ke proses PR/Accounting/PO
-                            $nextStatus = 'Pending PR & Accounting Number';
-                        } elseif ($mutationItems->isNotEmpty()) {
-                            // Jika tidak ada beli baru tapi ada mutasi, status bisa jadi menunggu mutasi selesai
-                            $nextStatus = 'Pending Asset Mutation';
-                        }
-
-
-                        // Update status pengajuan utama
-                        $this->assetRequest->update(['status' => $nextStatus]);
-                    });
+                    $this->processFullyApprovedRequest();
                     // $assetRequest->update(['status' => 'Pending PR & Accounting Number']); // <-- PERUBAHAN UTAMA
                     // $stockMutationItems = $assetRequest->items->where('fulfillment_type', 'STOCK_MUTATION');
 
@@ -562,6 +545,11 @@ class ShowAssetRequest extends Component
                 }
             }
         });
+        } catch (\App\Support\WorkflowNotConfigured $e) {
+            // Workflow/approver belum lengkap: semua perubahan dibatalkan, beri tahu user.
+            $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $e->getMessage()]);
+            return;
+        }
         $this->dispatch('swal:success', [
             'title' => 'Berhasil!',
             'text' => "Status pengajuan berhasil diperbarui",
@@ -571,20 +559,90 @@ class ShowAssetRequest extends Component
         $this->assetRequest->refresh();
     }
 
+    /**
+     * Semua tahap persetujuan selesai: buat mutasi untuk item stok site lain, lalu tentukan status berikutnya
+     * (PR & akunting bila ada pembelian baru, menunggu mutasi, atau selesai).
+     */
+    protected function processFullyApprovedRequest(): void
+    {
+        $this->assetRequest->load('items.assignedAsset.jobsite');
+            $mutationItems = $this->assetRequest->items->where('fulfillment_type', 'STOCK_MUTATION');
+            $newPurchaseItems = $this->assetRequest->items->where('fulfillment_type', 'NEW_PURCHASE');
+            $localStockItems = $this->assetRequest->items->where('fulfillment_type', 'STOCK_LOCAL');
+
+            DB::transaction(function () use ($mutationItems, $newPurchaseItems, $localStockItems) {
+
+                // ================================================================
+                // PROSES UNTUK ITEM YANG MEMERLUKAN MUTASI
+                // ================================================================
+                if ($mutationItems->isNotEmpty()) {
+                    // Kelompokkan item mutasi berdasarkan jobsite asalnya
+                    $itemsGroupedByOrigin = $mutationItems->groupBy('assignedAsset.jobsite_id');
+
+                    foreach ($itemsGroupedByOrigin as $originJobsiteId => $items) {
+                        // Buat SATU transaksi mutasi untuk setiap jobsite asal
+                        $mutationTransaction = AssetTransaction::create([
+                            'transaction_number' => $this->generateTransactionNumber('MT'), // Helper dengan prefix 'MT'
+                            'transaction_type' => 'MUTATION',
+                            'transaction_date' => now(),
+                            'from_jobsite_id' => $originJobsiteId,
+                            'to_jobsite_id' => $this->assetRequest->jobsite_id, // Jobsite tujuan pemohon
+                            'notes' => "Mutasi aset untuk memenuhi Pengajuan Aset No: {$this->assetRequest->request_number}",
+                            'status' => 'Pending Release', // Status awal mutasi: menunggu pelepasan dari site asal
+                            'created_by_user_id' => Auth::id(),
+                        ]);
+
+                        // Tambahkan semua item ke dalam transaksi mutasi ini
+                        foreach ($items as $item) {
+                            $mutationTransaction->items()->create(['asset_id' => $item->assigned_asset_id, 'asset_request_item_id' => $item->id,]);
+                            // Update status aset fisik menjadi 'Pending Mutation'
+                            $item->assignedAsset->update(['status' => 'Pending Mutation']);
+                        }
+                        $this->generateMutationApprovalSteps($mutationTransaction);
+                        // Kirim notifikasi ke PIC jobsite asal untuk melakukan pelepasan aset
+                        $originJobsite = \App\Models\Jobsite::find($originJobsiteId);
+                        $picUser = $originJobsite?->picUser; // pastikan relasi picUser ada di model Jobsite
+                        if ($picUser) {
+                            $msg = "Halo {$picUser->name},\n\nTerdapat permintaan mutasi aset dari Jobsite *{$this->assetRequest->jobsite->code}* untuk memenuhi pengajuan aset No. *{$this->assetRequest->request_number}*.\n\nMohon untuk melakukan validasi dan proses pelepasan aset sesuai permintaan tersebut di ams.binasaranasukses.co.id. Terima kasih.";
+                            sendMessageWithWhatsApp($picUser->whatsapp, $msg);
+                        }
+                    }
+                }
+                $nextStatus = 'Completed'; // Asumsi selesai jika tidak ada pembelian baru
+
+                if ($newPurchaseItems->isNotEmpty()) {
+                    // Jika ada item yang harus dibeli baru, alur berlanjut ke proses PR/Accounting/PO
+                    $nextStatus = 'Pending PR & Accounting Number';
+                } elseif ($mutationItems->isNotEmpty()) {
+                    // Jika tidak ada beli baru tapi ada mutasi, status bisa jadi menunggu mutasi selesai
+                    $nextStatus = 'Pending Asset Mutation';
+                }
+
+
+                // Update status pengajuan utama
+                $this->assetRequest->update(['status' => $nextStatus]);
+            });
+    }
+
+    /**
+     * Boleh memutuskan tahap ini bila: pengajuan sedang "Pending Approval", tahap masih Pending,
+     * semua tahap sebelumnya sudah selesai, dan user adalah approver tahap ini (admin boleh mewakili).
+     */
     public function canApproveOverallStep($approval): bool
     {
-        if (!$approval || $this->assetRequest->status !== 'Pending Approval' || !$this->isAdmin)
+        if (!$approval || $approval->status !== 'Pending' || $this->assetRequest->status !== 'Pending Approval') {
             return false;
-
-        if ($approval->step_order == 1) {
-            $previousStepsPending = User::where('department_id', 8)->where('jobsite_id', $this->assetRequest->jobsite_id)->get();
-        } else {
-            $previousStepsPending = $this->assetRequest->approvals()
-                ->where('step_order', '<', $approval->step_order)
-                ->where('status', 'Pending')->exists() && Auth::id() == $approval->approver_user_id;
+        }
+        if ((int) $approval->asset_request_id !== (int) $this->assetRequest->id) {
+            return false;
         }
 
-        return $approval->status === 'Pending' && $previousStepsPending || $approval->status === 'Pending' && Auth::id() == $approval->approver_user_id;
+        $isTurn = !AssetRequestApproval::where('asset_request_id', $approval->asset_request_id)
+            ->where('step_order', '<', $approval->step_order)
+            ->where('status', 'Pending')
+            ->exists();
+
+        return $isTurn && (Auth::id() == $approval->approver_user_id || $this->isAdmin);
     }
 
     public function isCurrentUserTheItPic(): bool
@@ -599,7 +657,7 @@ class ShowAssetRequest extends Component
             ->approvals()
             ->where('step_order', 1)
             ->first();
-        $secondApprovalStep = User::where('department_id', 8)->where('jobsite_id', $this->assetRequest->jobsite_id)->get();
+        $secondApprovalStep = User::where('department_id', config('app.it_department_id'))->where('jobsite_id', $this->assetRequest->jobsite_id)->get();
         // Jika tidak ada approval step ke-1 (null), coba alternatif: validasi user IT pada jobsite ini
 
         // User adalah PIC IT jika:
@@ -614,9 +672,12 @@ class ShowAssetRequest extends Component
 
     public function submitUpdatePic()
     {
+        abort_unless($this->isAdmin, 403, 'Aksi tidak diizinkan.');
+        $this->validate(['picToUpdate' => 'required|exists:users,id']);
+
         try {
-            $approval = AssetRequestApproval::find($this->idToUpdate);
-            if (!$approval) {
+            $approval = $this->findOwnApproval($this->idToUpdate);
+            if (!$approval || $approval->status !== 'Pending') {
                 $this->dispatch('error', [
                     'title' => 'Error!',
                     'text' => "Approval step tidak ditemukan.",
@@ -647,6 +708,29 @@ class ShowAssetRequest extends Component
     public function render()
     {
         $this->nik_option = User::where('jobsite_id', $this->siteToUpdate)->get(['id', 'nik', 'name'])->toArray();
-        return view('livewire.asset-requests.show-asset-request');
+        // Pengajuan yang menunggu approval tapi tahapnya kosong / tanpa approver (data lama) -> beri tahu user.
+        $approvalProblem = null;
+        if ($this->assetRequest->status === 'Pending Approval') {
+            $pending = $this->assetRequest->approvals->where('status', 'Pending');
+            if ($this->assetRequest->approvals->isEmpty()) {
+                $approvalProblem = 'Pengajuan ini tidak memiliki tahapan approval. ' . \App\Support\Workflow::ADMIN_HINT;
+            } elseif ($orphan = $pending->whereNull('approver_user_id')->sortBy('step_order')->first()) {
+                $approvalProblem = "Tahap {$orphan->step_order} ({$orphan->approver_role_name}) belum punya approver. " . \App\Support\Workflow::ADMIN_HINT;
+            }
+        }
+
+        $this->assetRequest->loadMissing(['requester.department:id,code,name', 'requester.position:id,name']);
+        $approvals = $this->assetRequest->approvals->sortBy('step_order')->values();
+        $currentApproval = $this->assetRequest->status === 'Pending Approval' ? $approvals->firstWhere('status', 'Pending') : null;
+
+        return view('livewire.asset-requests.show-asset-request', [
+            'approvalProblem' => $approvalProblem,
+            'approvalsOrdered' => $approvals,
+            'currentApproval' => $currentApproval,
+            'myTurnApproval' => $currentApproval && $this->canApproveOverallStep($currentApproval) ? $currentApproval : null,
+            'isItPic' => $this->isCurrentUserTheItPic(),
+            'itPendingCount' => $this->assetRequest->items->where('it_approval_status', 'Pending')->count(),
+            'stages' => \App\Livewire\AssetRequests\Dashboard::STAGES,
+        ]);
     }
 }

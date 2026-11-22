@@ -191,7 +191,7 @@ class GeneratePivot extends Component
             })
             ->select(
                 'pivots.id',
-                DB::raw('CASE WHEN year is null THEN '.$this->year_filter .' ELSE pivots.year END as year'),
+                DB::raw('CASE WHEN year is null THEN ' . (int) $this->year_filter . ' ELSE pivots.year END as year'),
                 'coas.cost_element_number',
                 'coas.description',
                 'pivots.jobsite_id',

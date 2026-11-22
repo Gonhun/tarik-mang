@@ -11,7 +11,8 @@ class AiInboundController extends Controller
     public function receive(Request $req)
     {
         // optional: verify token
-        if (env('N8N_SECRET_TOKEN') && $req->header('x-n8n-token') !== env('N8N_SECRET_TOKEN')) {
+        $secret = config('services.n8n.secret_token');
+        if (empty($secret) || !hash_equals((string) $secret, (string) $req->header('x-n8n-token'))) {
             return response()->json(['error'=>'unauthorized'], 401);
         }
 

@@ -2,90 +2,83 @@
 
 namespace App\Livewire\Modal\Asset;
 
-use Livewire\Component;
 use App\Models\Asset;
-use App\Models\AssetRequest;
-use App\Models\User;
+use App\Models\AssetRequestItem;
 use App\Models\AssetTransaction;
+use App\Models\User;
+use App\Support\TransactionNumber;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Livewire\Attributes\Locked;
+use Livewire\Component;
 
+/**
+ * BAST (serah terima) satu aset berstatus Free dari user yang login ke penerima.
+ * Pemberi, tanggal, dan aset ditentukan server (di tampilan juga terkunci).
+ */
 class Bast extends Component
 {
     public $isModalOpen = false;
 
-    // Properti untuk form
+    #[Locked]
     public $giver_user_id;
-    public $receiver_user_id;
+    #[Locked]
     public $transaction_date;
+    #[Locked]
+    public $assetId;
+
+    public $receiver_user_id;
     public $notes;
 
-    public $selected_assets = []; // ID aset yang dipilih untuk BAST
+    /** Untuk checkbox di tampilan (selalu berisi aset yang dikunci). */
+    public $selected_assets = [];
 
-    // Data untuk dropdown
-    public $allUsers = [];
     public $availableAssets = [];
 
     protected $listeners = ['openBastModal' => 'loadInitialData'];
 
     public function mount()
     {
-        // Muat data yang tidak sering berubah di sini
-        $this->allUsers = User::orderBy('name')->get(['id', 'name', 'nik']);
+        $this->availableAssets = collect();
     }
 
-    /**
-     * Dipanggil oleh event untuk membuka modal.
-     * Bisa menerima data awal, misal ID aset yang ingin diserahkan.
-     */
+    protected function canHandover(): bool
+    {
+        $user = Auth::user();
+
+        return $user->isItStaff() || $user->can('Master Asset');
+    }
+
     public function loadInitialData($initialData = [])
     {
         $this->resetForm();
 
-        // Set 'Pemberi' secara default ke user yang login
-        $this->giver_user_id = Auth::id();
-
-        // Jika ada data aset awal yang dikirim, langsung pilih aset tersebut
-        if (isset($initialData['asset_id'])) {
-            // Pastikan aset tersebut ada di daftar yang tersedia
-            //if ($this->availableAssets->pluck('id')->contains($initialData['asset_id'])) {
-            $this->selected_assets = [(string) $initialData['asset_id']];
-
-            // Muat semua aset yang 'Free' atau dipegang oleh 'Pemberi'
-            $this->loadAvailableAssets();
-            //}
+        if (!$this->canHandover()) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Anda tidak berhak membuat BAST.']);
+            return;
         }
+
+        $asset = Asset::with(['assetSeries:id,name', 'assetRequestItem.assetRequest:id,requester_user_id'])
+            ->find($initialData['asset_id'] ?? null);
+
+        if (!$asset || $asset->status !== 'Free') {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset tidak ditemukan atau statusnya bukan Free.']);
+            return;
+        }
+
+        $this->giver_user_id = Auth::id();
+        $this->transaction_date = now()->format('Y-m-d');
+        $this->assetId = $asset->id;
+        $this->selected_assets = [(string) $asset->id];
+        $this->availableAssets = collect([$asset]);
+
+        // Penerima default: pemohon pengajuan aset yang menghasilkan aset ini.
+        $requesterId = $asset->assetRequestItem?->assetRequest?->requester_user_id;
+        $this->receiver_user_id = $requesterId && $requesterId != $this->giver_user_id ? $requesterId : null;
 
         $this->isModalOpen = true;
         $this->dispatch('modal-open');
-    }
-
-    /**
-     * Muat daftar aset yang bisa diserahterimakan.
-     */
-    public function loadAvailableAssets()
-    {
-        $giverId = $this->giver_user_id;
-        $this->availableAssets = Asset::query()
-            ->where(function ($query) use ($giverId) {
-                $query->where('id', '=', $this->selected_assets[0]);
-                //->where('status', 'Free') // Aset yang bebas
-                //->orWhere('holder_user_id', $giverId); // Atau aset yang dipegang oleh si pemberi
-            })
-            ->with(['assetSeries:id,name'])
-            ->orderBy('asset_number')
-            ->get();
-        $pengajuan = AssetRequest::find($this->availableAssets->first()->asset_request_item_id);
-
-        $this->receiver_user_id = $pengajuan ? $pengajuan->requester_user_id : null;
-
-    }
-
-    // Lifecycle hook untuk memuat ulang aset yang tersedia jika 'Pemberi' diubah
-    public function updatedGiverUserId()
-    {
-        $this->loadAvailableAssets();
-        $this->selected_assets = []; // Reset pilihan aset
     }
 
     public function closeModal()
@@ -95,101 +88,117 @@ class Bast extends Component
 
     private function resetForm()
     {
-        $this->reset([
-            'giver_user_id',
-            'receiver_user_id',
-            'notes',
-            'selected_assets'
-        ]);
-        $this->transaction_date = now()->format('Y-m-d');
+        $this->reset(['giver_user_id', 'receiver_user_id', 'notes', 'selected_assets', 'assetId', 'transaction_date']);
+        $this->availableAssets = collect();
         $this->resetValidation();
     }
 
     public function submitBast()
     {
-        $this->validate([
-            'giver_user_id' => 'required|exists:users,id',
-            'receiver_user_id' => 'required|exists:users,id|different:giver_user_id',
-            'transaction_date' => 'required|date',
-            'selected_assets' => 'required|array|min:1',
-            'selected_assets.*' => 'exists:assets,id',
-            'notes' => 'nullable|string',
+        abort_unless($this->canHandover() && $this->assetId, 403);
 
+        // Validasi hanya field yang perlu (tanpa ikut memproses seluruh state komponen).
+        \Illuminate\Support\Facades\Validator::make([
+            'giver_user_id' => $this->giver_user_id,
+            'receiver_user_id' => $this->receiver_user_id,
+            'notes' => $this->notes,
+        ], [
+            'receiver_user_id' => 'required|exists:users,id|different:giver_user_id',
+            'notes' => 'nullable|string|max:1000',
         ], [
             'receiver_user_id.required' => 'Penerima wajib dipilih.',
             'receiver_user_id.different' => 'Penerima tidak boleh sama dengan Pemberi.',
-            'selected_assets.required' => 'Minimal satu aset harus dipilih.',
-        ]);
+        ])->validate();
 
-        DB::transaction(function () {
+        try {
+            $result = DB::transaction(function () {
+                // Kunci baris aset: cegah dua BAST untuk aset yang sama.
+                $asset = Asset::whereKey($this->assetId)->lockForUpdate()->first();
+                if (!$asset || $asset->status !== 'Free') {
+                    return null;
+                }
 
+                $transaction = AssetTransaction::create([
+                    'transaction_number' => TransactionNumber::next('BAST'),
+                    'transaction_type' => 'HANDOVER',
+                    'transaction_date' => $this->transaction_date,
+                    'from_user_id' => $this->giver_user_id,
+                    'to_user_id' => $this->receiver_user_id,
+                    'from_jobsite_id' => $asset->jobsite_id,
+                    'to_jobsite_id' => $asset->jobsite_id,
+                    'notes' => $this->notes,
+                    'status' => 'Completed', // BAST langsung selesai; penerima konfirmasi di "Aset Saya"
+                    'created_by_user_id' => Auth::id(),
+                ]);
+                $transaction->items()->create(['asset_id' => $asset->id]);
 
-            // Buat record transaksi utama
-            $transaction = AssetTransaction::create([
-                'transaction_number' => $this->generateTransactionNumber('BAST'),
-                'transaction_type' => 'HANDOVER',
-                'transaction_date' => $this->transaction_date,
-                'from_user_id' => $this->giver_user_id,
-                'to_user_id' => $this->receiver_user_id,
-                'notes' => $this->notes,
-                'status' => 'Completed', // BAST langsung dianggap selesai
-                'created_by_user_id' => Auth::id(),
-            ]);
-            $transaction->items()->createMany(
-                collect($this->selected_assets)->map(fn($id) => ['asset_id' => $id])->toArray()
-            );
-            
-            // Update aset sekaligus
-            Asset::whereIn('id', $this->selected_assets)->update([
-                'status' => 'Pre-Used',
-                'holder_user_id' => $this->receiver_user_id,
-                'asset_transaction_id'  => $transaction->id,
-            ]);
+                $asset->update([
+                    'status' => 'Pre-Used',
+                    'holder_user_id' => $this->receiver_user_id,
+                    'asset_transaction_id' => $transaction->id,
+                ]);
 
-            // Tambahkan item dan update status aset
-            // foreach ($this->selected_assets as $assetId) {
-            //     $transaction->items()->create(['asset_id' => $assetId]);
-            //     Asset::find($assetId)->update([
-            //         'status' => 'Pre-Used',
-            //         'holder_user_id' => $this->receiver_user_id,
-            //     ]);
-            // }
-        });
-        $this->SendFUWhatApp($this->receiver_user_id);
-        session()->flash('message', 'BAST berhasil dibuat dan status aset telah diperbarui.');
-        $this->closeModal();
-        $this->dispatch('refreshParentComponent'); // Kirim event untuk refresh halaman induk
-    }
-    public function SendFUWhatApp($userID)
-    {
-        $user = User::findOrFail($userID);
-        $wa = $user->whatsapp;
-        $pesan = "Halo $user->name, terdapat aset yang memerlukan proses BAST. Mohon segera lakukan pengecekan dan tindak lanjut Konfirmasi pada sistem AMS.\nhttps://ams.binasaranasukses.co.id/";
-        $pesan .= "Yang ada pada menu *Asset Saya*";
-        sendMessageWithWhatsApp($wa, $pesan);
-
-        $last5 = substr($wa, -5); // ambil 5 karakter terakhir
-        $hidden = str_repeat('•', strlen($wa) - 5); // ganti sisanya dengan •
-        $masked = $hidden . $last5;
-        $this->dispatch('swal:success', [
-            'title' => 'Berhasil!',
-            'text' => 'Pesan ada BAST Asset Terikirim ke Whastapp ' . $masked . ' 🙏',
-        ]);
-    }
-    protected function generateTransactionNumber($typePrefix = 'TRX')
-    {
-        $prefix = "{$typePrefix}/" . date('Ym') . "/";
-        $lastTransaction = AssetTransaction::where('transaction_number', 'LIKE', $prefix . '%')->orderBy('id', 'desc')->first();
-        $nextSequence = 1;
-        if ($lastTransaction) {
-            $lastSequence = (int) substr($lastTransaction->transaction_number, -4);
-            $nextSequence = $lastSequence + 1;
+                return [$asset, $transaction];
+            });
+        } catch (\Throwable $e) {
+            Log::error("BAST aset #{$this->assetId} gagal: " . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'BAST gagal disimpan. Coba lagi atau hubungi Administrator.']);
+            return;
         }
-        return $prefix . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+
+        if (!$result) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset sudah tidak berstatus Free (mungkin sudah diserahkan orang lain).']);
+            $this->closeModal();
+            $this->dispatch('refreshAssetList');
+            return;
+        }
+
+        [$asset, $transaction] = $result;
+        $waText = $this->notifyReceiver((int) $this->receiver_user_id);
+
+        $this->closeModal();
+        $this->dispatch('refreshAssetList');
+        $this->dispatch('swal:success', [
+            'title' => 'BAST dibuat',
+            'text' => "{$transaction->transaction_number}: aset {$asset->asset_number} diserahkan dan menunggu konfirmasi penerima. {$waText}",
+        ]);
+    }
+
+    /**
+     * Kirim WhatsApp ke penerima. Kegagalan tidak membatalkan BAST yang sudah tersimpan.
+     */
+    protected function notifyReceiver(int $userId): string
+    {
+        $user = User::find($userId);
+        $wa = (string) ($user->whatsapp ?? '');
+        if ($wa === '') {
+            return 'Penerima belum punya nomor WhatsApp, mohon kabari langsung.';
+        }
+
+        try {
+            $pesan = "Halo {$user->name}, terdapat aset yang memerlukan proses BAST. Mohon segera lakukan pengecekan dan konfirmasi pada sistem AMS.\n"
+                . "https://ams.binasaranasukses.co.id/\nPada menu *Asset Saya*";
+            $sent = sendMessageWithWhatsApp($wa, $pesan);
+        } catch (\Throwable $e) {
+            Log::warning("Notifikasi WA BAST ke user #{$userId} gagal: " . $e->getMessage());
+            $sent = false;
+        }
+        if (!$sent) {
+            return 'Notifikasi WhatsApp gagal dikirim, mohon kabari penerima langsung.';
+        }
+
+        $masked = str_repeat('•', max(0, strlen($wa) - 4)) . substr($wa, -4);
+
+        return "Notifikasi WhatsApp dikirim ke {$masked}.";
     }
 
     public function render()
     {
-        return view('livewire.modal.asset.bast');
+        // Daftar user hanya dimuat saat modal terbuka, dan tidak disimpan di state komponen.
+        return view('livewire.modal.asset.bast', [
+            'allUsers' => $this->isModalOpen
+                ? User::orderBy('name')->get(['id', 'name', 'nik'])
+                : collect(),
+        ]);
     }
 }
