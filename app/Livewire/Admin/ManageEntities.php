@@ -108,17 +108,23 @@ class ManageEntities extends Component
 
     public function delete($id)
     {
+        $row = \App\Models\Entity::find($id);
+        if (!$row) return;
+
+        // Cek pemakaian DULU (data master dihapus permanen / soft delete tidak ditolak database).
+        if ($reasons = \App\Support\MasterUsage::reasons('entity', (int) $row->id)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => \App\Support\MasterUsage::message('Entitas ' . $row->name, $reasons)]);
+            return;
+        }
+
         try {
-            Entity::find($id)->delete(); // Ini akan melakukan soft delete jika model menggunakan trait SoftDeletes
-            session()->flash('message', 'Entitas berhasil dihapus.');
-        } catch (\Illuminate\Database\QueryException $e) {
-            // Tangani error jika ada foreign key constraint yang mencegah penghapusan (onDelete('restrict'))
-            session()->flash('error', 'Gagal menghapus entitas. Kemungkinan entitas ini masih digunakan oleh data aset.');
-        } catch (\Exception $e) {
-            session()->flash('error', 'Terjadi kesalahan saat menghapus entitas.');
+            $row->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => 'Entitas ' . $row->name . ' berhasil dihapus.']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Hapus Entitas #' . $row->id . ' gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => 'Entitas ' . $row->name . ' masih terhubung dengan data lain.']);
         }
     }
-
     public function updatedSearch()
     {
         $this->resetPage(); // Reset pagination saat melakukan pencarian

@@ -66,7 +66,7 @@
                                                     <i class="bx bx-edit text-sm"></i>
                                                 </button>
                                                 <button wire:click="delete({{ $position->id }})"
-                                                        onclick="confirm('Apakah Anda yakin ingin menghapus jabatan ini: {{ $position->name }}?') || event.stopImmediatePropagation()"
+                                                        wire:confirm="Apakah Anda yakin ingin menghapus jabatan ini: {{ $position->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Jabatan">
                                                     <i class="bx bx-delete text-sm"></i>
                                                 </button>
@@ -168,24 +168,3 @@
     
 </div>
 
-@push('scripts')
-<script>
-      // Skrip untuk tooltip Bootstrap (opsional, jika Anda menggunakan data-bs-toggle="tooltip")
-      document.addEventListener('livewire:load', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-    Livewire.hook('message.processed', (message, component) => { // Re-initialize after Livewire update
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-            var existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
-            if (existingTooltip) {
-                existingTooltip.dispose();
-            }
-            new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    });
-</script>
-@endpush

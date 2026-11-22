@@ -42,7 +42,7 @@ class ManageDisposed extends Component
         $base = AssetTransaction::query()->where('transaction_type', 'DISPOSED');
 
         $statusCounts = (clone $base)->select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
-        $lostOpen = (clone $base)->whereIn('status', self::OPEN_STATUSES)->where('notes', 'like', '[Kehilangan]%')->count();
+        $lostOpen = (clone $base)->whereIn('status', self::OPEN_STATUSES)->where('notes', 'like', \App\Support\SqlLike::prefix('[Kehilangan]'))->count();
 
         $query = (clone $base)
             ->with([
@@ -53,8 +53,8 @@ class ManageDisposed extends Component
             ])
             ->when($this->statusFilter === 'open', fn ($q) => $q->whereIn('status', self::OPEN_STATUSES))
             ->when($this->statusFilter && $this->statusFilter !== 'open', fn ($q) => $q->where('status', $this->statusFilter))
-            ->when($this->reasonFilter === 'LOST', fn ($q) => $q->where('notes', 'like', '[Kehilangan]%'))
-            ->when($this->reasonFilter === 'OTHER', fn ($q) => $q->where(fn ($w) => $w->whereNull('notes')->orWhere('notes', 'not like', '[Kehilangan]%')))
+            ->when($this->reasonFilter === 'LOST', fn ($q) => $q->where('notes', 'like', \App\Support\SqlLike::prefix('[Kehilangan]')))
+            ->when($this->reasonFilter === 'OTHER', fn ($q) => $q->where(fn ($w) => $w->whereNull('notes')->orWhere('notes', 'not like', \App\Support\SqlLike::prefix('[Kehilangan]'))))
             ->when($this->search, function ($q) {
                 $term = '%' . $this->search . '%';
                 $q->where(fn ($w) => $w->where('transaction_number', 'like', $term)

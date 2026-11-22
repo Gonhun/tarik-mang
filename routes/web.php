@@ -60,6 +60,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/admin/workflow', App\Livewire\ApprovalWorkflows\ManageAssignments::class)->name('admin.workflow')->middleware('can:Add Workflow');
     Route::get('/admin/workflow/step', App\Livewire\ApprovalWorkflows\ManageWorkflows::class)->name('admin.workflow.add')->middleware('can:Add Workflow');
+    Route::get('/admin/workflow/jenis-transaksi', App\Livewire\ApprovalWorkflows\TransactionTypes::class)->name('admin.workflow.types')->middleware('can:Add Workflow');
 
     Route::get('/admin/departements', App\Livewire\Admin\ManageDepartments::class)->name('admin.dept')->middleware('can:Add Dept');
     Route::get('/admin/jabatan', App\Livewire\Admin\ManagePositions::class)->name('admin.jabatan')->middleware('can:Add Jabatan');
@@ -87,6 +88,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/asset/ba/{transaction}/{asset}', [App\Http\Controllers\pdf\AssetBaPrint::class, 'view'])
         ->whereNumber(['transaction', 'asset'])
         ->name('asset.ba.print');
+    // Stock opname (scan QR) & cetak label QR banyak sekaligus
+    Route::middleware('can:Master Asset')->group(function () {
+        Route::get('/asset/opname', App\Livewire\StockOpname\Index::class)->name('asset.opname');
+        Route::get('/asset/opname/{opname}', App\Livewire\StockOpname\Session::class)->whereNumber('opname')->name('asset.opname.show');
+        Route::get('/asset/labels', App\Livewire\Master\Asset\LabelPicker::class)->name('asset.labels');
+        Route::get('/asset/labels/print', [AssetLabelController::class, 'printMany'])->name('asset.labels.print');
+        Route::get('/asset/peminjaman', App\Livewire\AssetLoans\Index::class)->name('asset.loans');
+    });
     Route::get('/asset/qc', App\Livewire\Master\Asset\QcAsset::class)->name('asset.qc')->middleware('can:Master Asset');
 
     Route::get('/asset/disposed', App\Livewire\AssetDisposals\ManageDisposed::class)->name('asset.disposed')->middleware('can:Mutasi');

@@ -265,6 +265,21 @@
               <div class="text-truncate" data-i18n="Without menu">Damage</div>
             </a>
           </li>
+          <li class="menu-item {{ request()->routeIs('asset.loans') ? 'active' : '' }}">
+            <a href="{{ route('asset.loans')}}" class="menu-link">
+              <div class="text-truncate">Peminjaman</div>
+            </a>
+          </li>
+          <li class="menu-item {{ request()->routeIs('asset.opname*') ? 'active' : '' }}">
+            <a href="{{ route('asset.opname')}}" class="menu-link">
+              <div class="text-truncate">Stock Opname</div>
+            </a>
+          </li>
+          <li class="menu-item {{ request()->routeIs('asset.labels') ? 'active' : '' }}">
+            <a href="{{ route('asset.labels')}}" class="menu-link">
+              <div class="text-truncate">Cetak Label QR</div>
+            </a>
+          </li>
           @livewire('sidebar.menu-item', [
                     'routeName' => 'asset.qc',
                     'label' => 'QC Aset', 

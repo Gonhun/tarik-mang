@@ -17,38 +17,28 @@
                         <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
                             <div class="row">
                                 <div class="col-md-6 mb-3">
-                                    <label for="giver_user_id" class="form-label">Pemberi <span
-                                            class="text-danger">*</span></label>
-                                    <select wire:model.live="giver_user_id" id="giver_user_id"
-                                        class="form-select @error('giver_user_id') is-invalid @enderror" disabled>
-                                        <option value="">-- Pilih Pemberi --</option>
-                                        @foreach ($allUsers as $user)
-                                            <option value="{{ $user->id }}">{{ $user->name }}
-                                                ({{ $user->nik }})
-                                            </option>
-                                        @endforeach
-                                    </select>
-                                    @error('giver_user_id')
-                                        <span class="text-danger small">{{ $message }}</span>
-                                    @enderror
+                                    <label class="form-label">Pemberi</label>
+                                    <div class="form-control bg-lighter">{{ $giver->name ?? '-' }} <small class="text-muted">({{ $giver->nik ?? '-' }})</small></div>
                                 </div>
                                 <div class="col-md-6 mb-3">
-                                    <label for="receiver_user_id" class="form-label">Penerima <span
-                                            class="text-danger">*</span></label>
-                                    <select wire:model="receiver_user_id" id="receiver_user_id"
-                                        class="form-select @error('receiver_user_id') is-invalid @enderror">
-                                        <option value="">-- Pilih Penerima --</option>
-                                        @foreach ($allUsers as $user)
-                                            @if ($user->id != $giver_user_id)
-                                                <option value="{{ $user->id }}">{{ $user->name }}
-                                                    ({{ $user->nik }})
-                                                </option>
-                                            @endif
-                                        @endforeach
-                                    </select>
-                                    @error('receiver_user_id')
-                                        <span class="text-danger small">{{ $message }}</span>
-                                    @enderror
+                                    <label for="receiverSearch" class="form-label">Penerima <span class="text-danger">*</span></label>
+                                    @if ($receiver && !$receiverSearch)
+                                        <div class="input-group">
+                                            <span class="form-control text-truncate">{{ $receiver->name }} <small class="text-muted">({{ $receiver->nik }})</small></span>
+                                            <button type="button" class="btn btn-outline-secondary" wire:click="$set('receiver_user_id', null)">Ganti</button>
+                                        </div>
+                                    @else
+                                        <input type="search" id="receiverSearch" wire:model.live.debounce.400ms="receiverSearch" class="form-control @error('receiver_user_id') is-invalid @enderror" placeholder="Ketik nama / NIK (min. 2 huruf)" autocomplete="off">
+                                        <div wire:loading wire:target="receiverSearch" class="small text-muted mt-1"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mencari...</div>
+                                        @if ($receiverOptions->isNotEmpty())
+                                            <div class="list-group mt-1 shadow-sm">
+                                                @foreach ($receiverOptions as $u)
+                                                    <button type="button" class="list-group-item list-group-item-action py-1 small" wire:click="chooseReceiver({{ $u->id }})">{{ $u->name }} <span class="text-muted">· {{ $u->nik }} · {{ $u->jobsite->code ?? '-' }}</span></button>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    @endif
+                                    @error('receiver_user_id') <div class="text-danger small">{{ $message }}</div> @enderror
                                 </div>
                             </div>
 
@@ -111,53 +101,5 @@
         </div>
     @endif
 
-    @push('scripts')
-        <script>
-            // function initSelect2() {
-            //     $('#receiver_user_id').select2({
-            //         dropdownParent: $('#bastModal')
-            //     });
-            //     $('#receiver_user_id').on('change', function() {
-            //         @this.set('receiver_user_id', $(this).val());
-            //     });
-            // };
-
-            // $(document).ready(function() {
-            //     initSelect2();
-            //     $('#receiver_user_id').on('change', function() {
-            //         @this.set('receiver_user_id', $(this).val());
-            //     });
-            // });
-
-            // Livewire.on('modal-open', function() {
-            //         setTimeout(initSelect2, 50);
-            //         console.log("Select 2 sudah di load");
-            // });
-            function initializeReceiverSelect2() {
-                // Check if Select2 is already initialized to avoid errors
-                if ($('#receiver_user_id').data('select2')) {
-                    $('#receiver_user_id').select2('destroy');
-                }
-
-                $('#receiver_user_id').select2({
-                    // Adjust options as needed
-                    dropdownParent: $('#bastModal')
-                });
-
-                $('#receiver_user_id').off('change.livewire').on('change.livewire', function() {
-                    @this.set('receiver_user_id', $(this).val());
-                });
-            }
-
-            // Initialize Select2 on the first page load
-            $(document).ready(function() {
-                initializeReceiverSelect2();
-            });
-
-            // Re-initialize Select2 after every Livewire update
-            Livewire.on('modal-open', () => {
-                setTimeout(initializeReceiverSelect2, 50);
-            });
-        </script>
-    @endpush
+    
 </div>

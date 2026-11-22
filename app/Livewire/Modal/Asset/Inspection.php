@@ -24,7 +24,23 @@ class Inspection extends Component
     /** Peringatan bila workflow disposal belum siap (dicek saat memilih "Rusak berat"). */
     public $disposalWarning = null;
 
-    protected $listeners = ['openInspectionModal' => 'loadTransaction'];
+    protected $listeners = ['openInspectionModal' => 'loadTransaction', 'openInspectionForAsset' => 'loadForAsset'];
+
+    /** Dipanggil langsung dari tombol (tanpa lewat komponen halaman) agar modal cepat terbuka. */
+    public function loadForAsset($assetId)
+    {
+        $trx = AssetTransaction::where('transaction_type', 'RETURN')
+            ->where('status', 'Pending Inspection')
+            ->whereHas('items', fn ($q) => $q->where('asset_id', $assetId))
+            ->latest('id')
+            ->first();
+
+        if (!$trx) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Tidak ada pengembalian yang menunggu inspeksi untuk aset ini.']);
+            return;
+        }
+        $this->loadTransaction($trx->id);
+    }
 
     public function updatedInspectionOutcome($value)
     {

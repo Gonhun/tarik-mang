@@ -15,7 +15,7 @@ class Port extends Component
 
     public function mount()
     {
-        $this->fetchGroupData();
+        // Data API dimuat setelah halaman tampil (wire:init) agar halaman tidak menunggu API.
     }
     function formatBytes($bytes, $precision = 2)
     {
@@ -40,7 +40,7 @@ class Port extends Component
             // Menggunakan HTTP Client bawaan Laravel untuk mengambil data
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $token,
-            ])->withOptions(['verify' => config('services.fortigate.verify_ssl')])->timeout(60)->get($webhookUrl);
+            ])->withOptions(['verify' => config('services.fortigate.verify_ssl')])->connectTimeout(5)->timeout(15)->get($webhookUrl);
 
             if ($response->successful()) {
                 $data = $response->json();

@@ -91,7 +91,7 @@
                                                     <i class="bx bx-edit text-sm"></i>
                                                 </button>
                                                 {{-- <button wire:click="delete({{ $user->id }})"
-                                                        onclick="confirm('Apakah Anda yakin ingin menghapus pengguna ini: {{ $user->name }}?') || event.stopImmediatePropagation()"
+                                                        wire:confirm="Apakah Anda yakin ingin menghapus pengguna ini: {{ $user->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Pengguna">
                                                     <i class="far fa-trash-alt text-sm"></i>
                                                 </button> --}}
@@ -264,24 +264,3 @@
     @endif
 </div>
 
-@push('scripts')
-<script>
-   
-    document.addEventListener('livewire:load', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-    Livewire.hook('message.processed', (message, component) => {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-            var existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
-            if (existingTooltip) {
-                existingTooltip.dispose();
-            }
-            new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    });
-</script>
-@endpush

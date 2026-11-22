@@ -164,30 +164,44 @@ class ManageUsers extends Component
             'usersCollection' => $users, // Ganti nama variabel agar tidak konflik dengan properti $users
         ]);
     }
+    /** Role yang hanya boleh diberikan / dikelola oleh administrator. */
+    private const ADMIN_ROLES = ['Administrator', 'Administrator IT'];
+
+    protected function actorIsAdmin(): bool
+    {
+        return Auth::user()->hasRole(self::ADMIN_ROLES);
+    }
+
+    /** Non-admin tidak boleh mengubah / menghapus / reset akun administrator. */
+    protected function canManageUser(User $user): bool
+    {
+        return $this->actorIsAdmin() || !$user->hasRole(self::ADMIN_ROLES);
+    }
+
+    /**
+     * Reset password: password dikosongkan, user membuat password baru sendiri saat login (alur "buat password").
+     */
     public function RessetPassowrd($userid)
     {
-        if($userid)
-        {
-            $user = User::find($this->user_id);
-            if ($user) {
-                $user->update(['password' => null]);
-                $this->dispatch('swal:success', [
-                    'title' => 'Berhasil!',
-                    'text' => $this->department_id ? 'Departemen berhasil diperbarui.' : 'Departemen berhasil ditambahkan.',
-                ]);
-                $this->closeModal();
-                $this->resetInputFields();
-            }
-        }else{
-            $this->dispatch('swal:error', [
-                'title' => 'Error!',
-                'text' => 'NIK/User ID tidak ditemukan!',
-            ]);
-            $this->closeModal();
-            $this->resetInputFields();
+        $user = User::find($userid);
+        if (!$user) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'User tidak ditemukan.']);
             return;
         }
+        if (!$this->canManageUser($user) || $user->id === Auth::id()) {
+            $this->dispatch('swal:error', ['title' => 'Tidak diizinkan', 'text' => 'Anda tidak bisa mereset password akun ini.']);
+            return;
+        }
+
+        $user->update(['password' => null]);
+        $this->dispatch('swal:success', [
+            'title' => 'Password direset',
+            'text' => "{$user->name} ({$user->nik}) akan diminta membuat password baru saat login berikutnya.",
+        ]);
+        $this->closeModal();
+        $this->resetInputFields();
     }
+
     public function create()
     {
         $this->mode = 'create';
@@ -215,7 +229,7 @@ class ManageUsers extends Component
     public function edit($id)
     {
         $user = User::findOrFail($id);
-        if ($user->nik === 'admin' && Auth::user()->nik !== 'admin') {
+        if (!$this->canManageUser($user)) {
             $this->dispatch('swal:error', [
                 'title' => 'Error!',
                 'text' => 'Tidak bisa mengedit Administrator!',
@@ -248,7 +262,18 @@ class ManageUsers extends Component
     {
        
         $validatedData = $this->validate($this->rules());
-       
+
+        // Hanya administrator yang boleh memberi role administrator (cegah menaikkan hak akses sendiri).
+        $requestedRoles = Role::whereIn('id', (array) $this->user_roles)->pluck('name');
+        if (!$this->actorIsAdmin() && $requestedRoles->intersect(self::ADMIN_ROLES)->isNotEmpty()) {
+            $this->addError('user_roles', 'Hanya administrator yang boleh memberi role Administrator.');
+            return;
+        }
+        if ($this->user_id && ($existing = User::find($this->user_id)) && !$this->canManageUser($existing)) {
+            $this->addError('user_roles', 'Anda tidak bisa mengubah akun administrator.');
+            return;
+        }
+
         $dataToStore = [
             'name' => ucwords($validatedData['name']),
             'nik' => $validatedData['nik'],
@@ -276,11 +301,30 @@ class ManageUsers extends Component
 
     public function delete($id)
     {
+        $user = User::find($id);
+        if (!$user) return;
+
+        // Data user dipakai di banyak tempat (aset, approval, transaksi) dan dihapus permanen: cek dulu.
+        $reasons = [];
+        if ($user->id === Auth::id()) $reasons[] = 'tidak bisa menghapus akun sendiri';
+        if (!$this->canManageUser($user)) $reasons[] = 'akun administrator hanya bisa dihapus administrator';
+        if (($n = \App\Models\Asset::where('holder_user_id', $user->id)->count()) > 0) $reasons[] = "masih memegang {$n} aset";
+        $pending = \App\Models\AssetRequestApproval::where('approver_user_id', $user->id)->where('status', 'Pending')->count()
+            + \App\Models\AssetTransactionApproval::where('approver_user_id', $user->id)->where('status', 'Pending')->count();
+        if ($pending > 0) $reasons[] = "masih menjadi approver di {$pending} tahap yang menunggu";
+        if (\App\Models\ApprovalWorkflowStep::where('user_id', $user->id)->exists()) $reasons[] = 'dipakai sebagai approver di workflow';
+
+        if ($reasons) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => "{$user->name}: " . implode('; ', $reasons) . '.']);
+            return;
+        }
+
         try {
-            User::find($id)->delete(); // Soft delete
-            session()->flash('message', 'Pengguna berhasil dihapus.');
-        } catch (\Exception $e) {
-            session()->flash('error', 'Gagal menghapus pengguna: ' . $e->getMessage());
+            $user->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => "Pengguna {$user->name} dihapus."]);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning("Hapus user #{$user->id} gagal: " . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => "{$user->name} masih terhubung dengan data lain (riwayat transaksi/pengajuan)."]);
         }
     }
 

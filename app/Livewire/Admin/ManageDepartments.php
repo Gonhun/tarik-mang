@@ -135,11 +135,22 @@ class ManageDepartments extends Component
 
     public function delete($id)
     {
+        $row = \App\Models\Department::find($id);
+        if (!$row) return;
+
+        // Cek pemakaian DULU (data master dihapus permanen / soft delete tidak ditolak database).
+        if ($reasons = \App\Support\MasterUsage::reasons('department', (int) $row->id)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => \App\Support\MasterUsage::message('Departemen ' . $row->name, $reasons)]);
+            return;
+        }
+
         try {
-            Department::find($id)->delete(); // Asumsi menggunakan SoftDeletes jika ada
-            session()->flash('message', 'Departemen berhasil dihapus.');
-        } catch (\Exception $e) {
-            session()->flash('error', 'Gagal menghapus departemen. Kemungkinan masih terhubung dengan data pengguna atau data lain.');
+            $row->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => 'Departemen ' . $row->name . ' berhasil dihapus.']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Hapus Departemen #' . $row->id . ' gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => 'Departemen ' . $row->name . ' masih terhubung dengan data lain.']);
         }
     }
+
 }

@@ -36,7 +36,7 @@
                                             <i class="bx bx-bxs-edit text-sm"></i>
                                         </button>
                                         <button wire:click="delete({{ $cc->id }})"
-                                                onclick="confirm('Yakin hapus Cost Center ini: {{ $cc->cost_center_number }}?') || event.stopImmediatePropagation()"
+                                                wire:confirm="Yakin hapus Cost Center ini: {{ $cc->cost_center_number }}?"
                                                 class="btn btn-link text-danger text-gradient p-1 mb-0" title="Hapus">
                                             <i class="bx bx-bxs-trash text-sm"></i>
                                         </button>

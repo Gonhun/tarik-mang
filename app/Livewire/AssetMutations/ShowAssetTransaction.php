@@ -77,7 +77,8 @@ class ShowAssetTransaction extends Component
         // 4. Giliran: tidak ada tahap sebelumnya yang masih Pending.
         return (int) $approval->asset_transaction_id === (int) $this->transaction->id
             && $approval->status === 'Pending'
-            && !in_array($this->transaction->fresh()->status, ['Completed', 'Rejected', 'Cancelled'], true)
+            // Transaksi yang sudah lewat tahap approval (mis. Pending Release dari pengajuan aset) tidak bisa di-approve lagi.
+            && !in_array($this->transaction->fresh()->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true)
             && Auth::id() == $approval->approver_user_id
             && !AssetTransactionApproval::where('asset_transaction_id', $approval->asset_transaction_id)
                 ->where('step_order', '<', $approval->step_order)
@@ -480,7 +481,8 @@ class ShowAssetTransaction extends Component
             'reassignOptions' => $reassignOptions,
             'reassignUser' => $this->reassignUserId ? User::find($this->reassignUserId, ['id', 'name', 'nik']) : null,
             'approvals' => $approvals,
-            'currentApproval' => in_array($this->transaction->status, ['Rejected', 'Cancelled', 'Completed'], true) ? null : $current,
+            'currentApproval' => in_array($this->transaction->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true) ? null : $current,
+            'approvalsNotNeeded' => in_array($this->transaction->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true),
             // Hanya approver yang sedang giliran yang mendapat tombol (dicek ulang di server saat submit).
             'myTurnApprovalId' => $current && $this->canApprove($current) ? $current->id : null,
             'modalApproval' => $this->isApprovalModalOpen && $this->currentApprovalId ? $approvals->firstWhere('id', $this->currentApprovalId) : null,

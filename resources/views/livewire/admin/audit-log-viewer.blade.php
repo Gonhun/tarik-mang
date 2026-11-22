@@ -173,24 +173,3 @@
     @endif
 </div>
 
-@push('scripts')
-<script>
-    // Skrip untuk tooltip Bootstrap (sama seperti sebelumnya)
-    document.addEventListener('livewire:load', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        });
-    });
-    Livewire.hook('message.processed', (message, component) => {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        tooltipTriggerList.forEach(function (tooltipTriggerEl) {
-            var existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
-            if (existingTooltip) {
-                existingTooltip.dispose();
-            }
-            new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    });
-</script>
-@endpush

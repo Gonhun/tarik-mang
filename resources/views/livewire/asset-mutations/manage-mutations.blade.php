@@ -97,8 +97,17 @@
                                             $incomplete = !in_array($m->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES)
                                                 && ($m->approvals->isEmpty() || $m->approvals->where('status', 'Pending')->whereNull('approver_user_id')->isNotEmpty());
                                         @endphp
+                                        @php
+                                            $pastApproval = in_array($m->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES);
+                                            $leftoverOnly = $pastApproval && $m->approvals->where('status', '!=', 'Pending')->isEmpty();
+                                        @endphp
                                         {{-- Nama validator per tahap --}}
-                                        @if ($m->approvals->isNotEmpty())
+                                        @if ($leftoverOnly)
+                                            <small class="d-block text-muted mt-1">
+                                                <i class="bx bx-check-double"></i>
+                                                {{ str_contains((string) $m->notes, 'Pengajuan Aset No') ? 'Disetujui lewat pengajuan aset' : 'Tanpa approval terpisah' }}
+                                            </small>
+                                        @elseif ($m->approvals->isNotEmpty())
                                             <ul class="list-unstyled small mb-0 mt-1">
                                                 @foreach ($m->approvals->sortBy('step_order') as $ap)
                                                     @php
@@ -106,13 +115,14 @@
                                                         [$ic, $cl] = match (true) {
                                                             $ap->status === 'Approved' => ['bx-check', 'text-success'],
                                                             $ap->status === 'Rejected' => ['bx-x', 'text-danger'],
+                                                            $pastApproval => ['bx-minus', 'text-muted'],
                                                             !$ap->approver_user_id => ['bx-error', 'text-danger'],
                                                             $isNow => ['bx-time-five', 'text-warning'],
                                                             default => ['bx-circle', 'text-muted'],
                                                         };
                                                     @endphp
                                                     <li class="{{ $cl }} text-truncate" style="max-width: 240px" title="{{ $ap->approver_role_name }}">
-                                                        <i class="bx {{ $ic }}"></i> {{ $ap->approver->name ?? 'Belum ditentukan' }}
+                                                        <i class="bx {{ $ic }}"></i> {{ $ap->approver->name ?? ($pastApproval ? 'tidak diperlukan' : 'Belum ditentukan') }}
                                                         @if ($ap->notes === \App\Support\Workflow::AUTO_NOTE)<span class="text-muted">(otomatis)</span>@endif
                                                     </li>
                                                 @endforeach

@@ -12,7 +12,8 @@
                         @foreach ($readiness as $type => $info)
                             @php
                                 $ok = $info['rules'] > 0;
-                                $fallbackLost = $type === 'LOST' && !$ok && ($readiness['DISPOSED']['rules'] ?? 0) > 0;
+                                $fb = \App\Support\Workflow::fallbacks($type)[0] ?? null;
+                                $fallbackLost = $fb && !$ok && ($readiness[$fb]['rules'] ?? 0) > 0;
                             @endphp
                             <li class="list-group-item d-flex align-items-center justify-content-between gap-2">
                                 <div class="min-w-0">
@@ -22,7 +23,7 @@
                                 @if ($ok)
                                     <span class="badge bg-label-{{ $info['hasDefault'] ? 'success' : 'warning' }}" title="{{ $info['hasDefault'] ? '' : 'Hanya berlaku untuk jabatan/site tertentu' }}">{{ $info['hasDefault'] ? 'Siap' : 'Sebagian' }}</span>
                                 @elseif ($fallbackLost)
-                                    <span class="badge bg-label-info" title="Memakai workflow disposal">Pakai DISPOSED</span>
+                                    <span class="badge bg-label-info" title="Memakai workflow {{ $fb }}">Pakai {{ $fb }}</span>
                                 @else
                                     <span class="badge bg-label-danger">Belum diatur</span>
                                 @endif
@@ -174,9 +175,13 @@
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <a href="{{ route('admin.workflow.add') }}" class="btn btn-success btn-sm ms-2 d-inline-flex align-items-center">
+                    <a href="{{ route('admin.workflow.add') }}" class="btn btn-success btn-sm d-inline-flex align-items-center">
                         <i class="bx bx-bell-plus me-1"></i>
                         <span>Create Step</span>
+                    </a>
+                    <a href="{{ route('admin.workflow.types') }}" class="btn btn-outline-primary btn-sm ms-2 d-inline-flex align-items-center">
+                        <i class="bx bx-list-ul me-1"></i>
+                        <span>Master jenis transaksi</span>
                     </a>
                 </div>
                 <input wire:model.live.debounce.300ms="search" type="text" class="form-control mb-3" placeholder="Cari berdasarkan Jenis Transaksi...">
@@ -229,62 +234,92 @@
 
     {{-- Modal untuk Form Tambah/Edit Aturan --}}
     @if ($isModalOpen)
-        <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
+        @php
+            $types = \App\Support\Workflow::types();
+            $selected = $types[$transaction_type] ?? null;
+        @endphp
+        <div class="modal fade show d-block" tabindex="-1" role="dialog" aria-modal="true" aria-labelledby="ruleTitle" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg modal-fullscreen-sm-down">
                 <div class="modal-content">
-                    <form wire:submit.prevent="store">
-                        <div class="modal-header">
-                            <h5 class="modal-title">{{ $assignment_id ? 'Edit Aturan Validasi' : 'Tambah Aturan Validasi Baru' }}</h5>
-                            <button type="button" class="btn-close" wire:click="closeModal"></button>
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="ruleTitle">{{ $assignment_id ? 'Edit aturan validasi' : 'Tambah aturan validasi baru' }}</h5>
+                        <button type="button" class="btn-close" wire:click="closeModal" aria-label="Tutup"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="small text-muted">Aturan menentukan workflow approval yang dipakai. Kosongkan jabatan/site untuk berlaku ke semua. Bila beberapa aturan cocok, yang paling spesifik dipakai (jabatan + site → jabatan → site → default), lalu prioritas terbesar.</p>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label for="rule_type" class="form-label mb-1">Jenis transaksi <span class="text-danger">*</span></label>
+                                <a href="{{ route('admin.workflow.types') }}" class="small" target="_blank">Lihat master jenis transaksi <i class="bx bx-link-external"></i></a>
+                            </div>
+                            <select id="rule_type" wire:model.live="transaction_type" class="form-select @error('transaction_type') is-invalid @enderror">
+                                <option value="">-- Pilih jenis transaksi --</option>
+                                @foreach ($types as $code => $t)
+                                    @if (($t['aktif'] ?? true) || $code === $transaction_type)
+                                        <option value="{{ $code }}">{{ $t['label'] }} ({{ $code }}){{ ($t['aktif'] ?? true) ? '' : ' — nonaktif' }}</option>
+                                    @endif
+                                @endforeach
+                            </select>
+                            @error('transaction_type') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                            @if ($selected)
+                                <div class="border rounded p-2 mt-2 small bg-lighter">
+                                    <span class="d-block">{{ $selected['deskripsi'] }}</span>
+                                    @if (!empty($selected['dipakai_di']))
+                                        <span class="d-block text-muted mt-1"><i class="bx bx-menu"></i> Dipakai di: {{ implode(', ', $selected['dipakai_di']) }}</span>
+                                    @endif
+                                    @if (!empty($selected['fallback']))
+                                        <span class="d-block text-muted"><i class="bx bx-redo"></i> Bila belum ada aturan, memakai workflow {{ $types[$selected['fallback']]['label'] ?? $selected['fallback'] }}.</span>
+                                    @endif
+                                </div>
+                            @endif
                         </div>
-                        <div class="modal-body">
-                            <p class="small text-muted">Aturan ini menentukan alur persetujuan yang akan digunakan. Kosongkan Jabatan atau Jobsite untuk menerapkan aturan ke semua.</p>
-                            <div class="mb-3">
-                                <label class="form-label">Jenis Transaksi <span class="text-danger">*</span></label>
-                                <select wire:model.defer="transaction_type" class="form-select @error('transaction_type') is-invalid @enderror">
-                                    <option value="">-- Pilih Jenis Transaksi --</option>
-                                    @foreach($transactionTypes as $type)
-                                        <option value="{{ $type }}">{{ $type }}</option>
+
+                        <div class="row g-3">
+                            <div class="col-12 col-md-6">
+                                <label for="rule_position" class="form-label">Jabatan pemohon <span class="text-muted fw-normal">(opsional)</span></label>
+                                <select id="rule_position" wire:model="position_id" class="form-select">
+                                    <option value="">-- Semua jabatan --</option>
+                                    @foreach ($allPositions as $position)
+                                        <option value="{{ $position->id }}">{{ $position->name }}</option>
                                     @endforeach
                                 </select>
-                                @error('transaction_type') <span class="text-danger small">{{ $message }}</span> @enderror
                             </div>
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Berlaku untuk Jabatan (Opsional)</label>
-                                    <select wire:model.defer="position_id" class="form-select">
-                                        <option value="">-- Semua Jabatan --</option>
-                                        @foreach($allPositions as $position)
-                                            <option value="{{ $position->id }}">{{ $position->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Berlaku untuk Jobsite (Opsional)</label>
-                                    <select wire:model.defer="jobsite_id" class="form-select">
-                                        <option value="">-- Semua Jobsite --</option>
-                                        @foreach($allJobsites as $jobsite)
-                                            <option value="{{ $jobsite->id }}">{{ $jobsite->name }}</option>
-                                        @endforeach
-                                    </select>
-                                </div>
+                            <div class="col-12 col-md-6">
+                                <label for="rule_site" class="form-label">Site pemohon <span class="text-muted fw-normal">(opsional)</span></label>
+                                <select id="rule_site" wire:model="jobsite_id" class="form-select">
+                                    <option value="">-- Semua site --</option>
+                                    @foreach ($allJobsites as $jobsite)
+                                        <option value="{{ $jobsite->id }}">{{ $jobsite->code ?? '' }} {{ $jobsite->name }}</option>
+                                    @endforeach
+                                </select>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Gunakan Alur Kerja (Workflow) <span class="text-danger">*</span></label>
-                                <select wire:model.defer="approval_workflow_id" class="form-select @error('approval_workflow_id') is-invalid @enderror">
-                                    <option value="">-- Pilih Alur Kerja --</option>
-                                    @foreach($allWorkflows as $workflow)
+                            <div class="col-12 col-md-8">
+                                <label for="rule_workflow" class="form-label">Workflow <span class="text-danger">*</span></label>
+                                <select id="rule_workflow" wire:model="approval_workflow_id" class="form-select @error('approval_workflow_id') is-invalid @enderror">
+                                    <option value="">-- Pilih workflow --</option>
+                                    @foreach ($allWorkflows as $workflow)
                                         <option value="{{ $workflow->id }}">{{ $workflow->name }}</option>
                                     @endforeach
                                 </select>
-                                @error('approval_workflow_id') <span class="text-danger small">{{ $message }}</span> @enderror
+                                @error('approval_workflow_id') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                <small class="text-muted">Belum ada? Buat di <a href="{{ route('admin.workflow.add') }}" target="_blank">Create Step</a>.</small>
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label for="rule_priority" class="form-label">Prioritas</label>
+                                <input id="rule_priority" type="number" min="0" max="100" wire:model="priority" class="form-control @error('priority') is-invalid @enderror">
+                                @error('priority') <div class="invalid-feedback">{{ $message }}</div> @enderror
+                                <small class="text-muted">Besar = didahulukan.</small>
                             </div>
                         </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" wire:click="closeModal">Batal</button>
-                            <button type="submit" class="btn btn-primary">Simpan Aturan</button>
-                        </div>
-                    </form>
+                    </div>
+                    <div class="modal-footer d-grid gap-2 d-sm-flex justify-content-sm-end">
+                        <button type="button" class="btn btn-outline-secondary" wire:click="closeModal">Batal</button>
+                        <button type="button" wire:click="store" class="btn btn-primary" wire:loading.attr="disabled" wire:target="store">
+                            <span wire:loading.remove wire:target="store">Simpan aturan</span>
+                            <span wire:loading wire:target="store"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Menyimpan...</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

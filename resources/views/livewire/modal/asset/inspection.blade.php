@@ -1,6 +1,6 @@
 <div>
     {{-- Indikator saat modal sedang dimuat --}}
-    <div wire:loading.flex wire:target="loadTransaction" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center" style="background: rgba(0,0,0,.25); z-index: 1060;">
+    <div wire:loading.flex wire:target="loadTransaction,loadForAsset" class="position-fixed top-0 start-0 w-100 h-100 align-items-center justify-content-center" style="background: rgba(0,0,0,.25); z-index: 1060;">
         <div class="bg-white rounded shadow px-4 py-3 d-flex align-items-center gap-2">
             <span class="spinner-border spinner-border-sm text-primary" role="status"></span> Memuat...
         </div>

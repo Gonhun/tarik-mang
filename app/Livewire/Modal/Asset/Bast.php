@@ -29,6 +29,7 @@ class Bast extends Component
     public $assetId;
 
     public $receiver_user_id;
+    public $receiverSearch = '';
     public $notes;
 
     /** Untuk checkbox di tampilan (selalu berisi aset yang dikunci). */
@@ -86,9 +87,15 @@ class Bast extends Component
         $this->isModalOpen = false;
     }
 
+    public function chooseReceiver($userId)
+    {
+        $this->receiver_user_id = (int) $userId;
+        $this->receiverSearch = '';
+    }
+
     private function resetForm()
     {
-        $this->reset(['giver_user_id', 'receiver_user_id', 'notes', 'selected_assets', 'assetId', 'transaction_date']);
+        $this->reset(['giver_user_id', 'receiver_user_id', 'receiverSearch', 'notes', 'selected_assets', 'assetId', 'transaction_date']);
         $this->availableAssets = collect();
         $this->resetValidation();
     }
@@ -194,11 +201,20 @@ class Bast extends Component
 
     public function render()
     {
-        // Daftar user hanya dimuat saat modal terbuka, dan tidak disimpan di state komponen.
+        // Penerima dicari lewat nama/NIK (bukan dropdown 6000+ user) agar modal cepat terbuka.
+        $options = collect();
+        if ($this->isModalOpen && strlen(trim($this->receiverSearch)) >= 2) {
+            $term = '%' . trim($this->receiverSearch) . '%';
+            $options = User::with('jobsite:id,code')
+                ->where('id', '!=', $this->giver_user_id)
+                ->where(fn ($q) => $q->where('name', 'like', $term)->orWhere('nik', 'like', $term))
+                ->orderBy('name')->limit(8)->get(['id', 'name', 'nik', 'jobsite_id']);
+        }
+
         return view('livewire.modal.asset.bast', [
-            'allUsers' => $this->isModalOpen
-                ? User::orderBy('name')->get(['id', 'name', 'nik'])
-                : collect(),
+            'giver' => $this->isModalOpen && $this->giver_user_id ? User::find($this->giver_user_id, ['id', 'name', 'nik']) : null,
+            'receiver' => $this->isModalOpen && $this->receiver_user_id ? User::find($this->receiver_user_id, ['id', 'name', 'nik']) : null,
+            'receiverOptions' => $options,
         ]);
     }
 }

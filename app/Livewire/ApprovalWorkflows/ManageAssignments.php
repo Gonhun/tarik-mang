@@ -23,14 +23,8 @@ class ManageAssignments extends Component
     public $allWorkflows = [];
     public $allPositions = [];
     public $allJobsites = [];
-    // REPAIR dihapus dari pilihan: tidak dipakai alur mana pun.
-    public $transactionTypes = [
-        'REQUEST_ASSET',
-        'MUTATION',
-        'DISPOSED',
-        'LOST', // Kehilangan aset; jika belum diatur, sistem memakai alur DISPOSED
-        'REQUEST_LICENSE'
-    ];
+    /** Kode jenis transaksi dari master (config/transaction_types.php). */
+    public $transactionTypes = [];
 
     /** Hasil perbaikan massal terakhir: [['number' => .., 'ok' => bool, 'message' => ..], ...] */
     public $repairReport = [];
@@ -46,6 +40,7 @@ class ManageAssignments extends Component
 
     public function mount()
     {
+        $this->transactionTypes = array_keys(\App\Support\Workflow::types());
         // Muat data master sekali untuk dropdown
         $this->allWorkflows = ApprovalWorkflow::where('is_active', true)->orderBy('name')->get();
         $this->allPositions = Position::orderBy('name')->get();
@@ -55,11 +50,15 @@ class ManageAssignments extends Component
     protected function rules()
     {
         return [
-            'transaction_type' => ['required', Rule::in($this->transactionTypes)],
+            // Aturan baru hanya untuk jenis aktif; saat edit, jenis lama tetap boleh dipertahankan.
+            'transaction_type' => ['required', Rule::in(array_unique(array_merge(
+                array_keys(\App\Support\Workflow::types(true)),
+                $this->assignment_id ? [ApprovalWorkflowAssignment::find($this->assignment_id)?->transaction_type] : []
+            )))],
+            'priority' => 'required|integer|min:0|max:100',
             'approval_workflow_id' => 'required|exists:approval_workflows,id',
             'position_id' => 'nullable|exists:positions,id',
             'jobsite_id' => 'nullable|exists:jobsites,id',
-            'priority' => 'required|integer',
         ];
     }
 
@@ -109,7 +108,7 @@ class ManageAssignments extends Component
     {
         $jobsiteId = $this->testJobsiteId !== '' ? (int) $this->testJobsiteId : null;
         $positionId = $this->testPositionId !== '' ? (int) $this->testPositionId : null;
-        $fallbacks = $this->testType === 'LOST' ? ['DISPOSED'] : [];
+        $fallbacks = \App\Support\Workflow::fallbacks($this->testType);
 
         try {
             $workflow = \App\Support\Workflow::resolve($this->testType, $positionId, $jobsiteId, $fallbacks);
@@ -158,7 +157,7 @@ class ManageAssignments extends Component
             'canRepair' => \App\Support\TransactionApprovalRepair::canManage(\Illuminate\Support\Facades\Auth::user()),
             'readiness' => $readiness,
             'test' => $this->testResult(),
-            'typeLabels' => \App\Support\Workflow::LABELS,
+            'typeLabels' => \App\Support\Workflow::labels(),
         ]);
     }
 

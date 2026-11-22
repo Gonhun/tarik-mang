@@ -120,22 +120,26 @@ class ManageLevel extends Component
 
     public function delete($id)
     {
+        $row = \App\Models\PositionLevel::find($id);
+        if (!$row) return;
+
+        // Cek pemakaian DULU (data master dihapus permanen / soft delete tidak ditolak database).
+        if ($reasons = \App\Support\MasterUsage::reasons('position_level', (int) $row->id)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => \App\Support\MasterUsage::message('Level jabatan ' . $row->name, $reasons)]);
+            return;
+        }
+
         try {
-            // Cek apakah jabatan ini masih digunakan oleh user
-            $position=PositionLevel::find($id); // Soft delete
-            if ($position) {
-                if (User::where('position_id', $id)->exists()) {
-                    session()->flash('error', 'Gagal menghapus jabatan. Jabatan ini masih digunakan oleh pengguna.');
-                    return;
-                }
-                // Hapus file jobdesk dari storage jika ada
-               
-                $position->delete();
-                session()->flash('message', 'Jabatan berhasil dihapus.');
-            }
-        } catch (\Exception $e) {
-            session()->flash('error', 'Gagal menghapus jabatan. ' . $e->getMessage());
+            $row->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => 'Level jabatan ' . $row->name . ' berhasil dihapus.']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Hapus Level jabatan #' . $row->id . ' gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => 'Level jabatan ' . $row->name . ' masih terhubung dengan data lain.']);
         }
     }
-     public function updatedSearch(){ $this->resetPage(); }
+
+    public function updatedSearch()
+    {
+        $this->resetPage();
+    }
 }

@@ -4,7 +4,7 @@
         'Free' => 'success', 'Used' => 'primary', 'Pre-Used' => 'info',
         'Repair' => 'warning', 'Demage' => 'danger', 'Missing' => 'danger',
         'Pending Inspection' => 'warning', 'Pending Mutation' => 'info', 'Delivery' => 'info',
-        'Pre Disposed' => 'secondary', 'Disposed' => 'dark', 'Scrap' => 'dark',
+        'Pre Disposed' => 'secondary', 'Disposed' => 'dark', 'Scrap' => 'dark', 'Borrowed' => 'warning',
     ];
     $listTargets = 'search,selectedJobsite,selectedStatus,perPage,resetFilters,gotoPage,nextPage,previousPage';
 @endphp
@@ -20,6 +20,9 @@
                 </p>
             </div>
             <div class="d-flex flex-wrap gap-2">
+                <a href="{{ route('asset.loans') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-time-five me-1"></i>Peminjaman</a>
+                <a href="{{ route('asset.opname') }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-qr-scan me-1"></i>Stock opname</a>
+                <a href="{{ route('asset.labels', array_filter(['site' => $selectedJobsite, 'status' => $selectedStatus, 'q' => $search])) }}" class="btn btn-outline-secondary btn-sm"><i class="bx bx-printer me-1"></i>Cetak label</a>
                 <button wire:click="exportExcel" wire:loading.attr="disabled" wire:target="exportExcel" class="btn btn-outline-success btn-sm">
                     <span wire:loading.remove wire:target="exportExcel"><i class="bx bx-bxs-file-export me-1"></i>Ekspor Excel</span>
                     <span wire:loading wire:target="exportExcel"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengekspor...</span>
@@ -166,14 +169,12 @@
                                     <td class="text-end text-nowrap">
                                         {{-- Aksi utama sesuai status --}}
                                         @if ($asset->status == 'Free')
-                                            <button wire:click="createBast({{ $asset->id }})" wire:loading.attr="disabled" wire:target="createBast({{ $asset->id }})" class="btn btn-sm btn-primary">
-                                                <span wire:loading.remove wire:target="createBast({{ $asset->id }})"><i class="bx bx-transfer me-1"></i>Serah terima</span>
-                                                <span wire:loading wire:target="createBast({{ $asset->id }})"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                                            <button type="button" wire:click="$dispatch('openBastModal', { initialData: { asset_id: {{ $asset->id }} } })" class="btn btn-sm btn-primary">
+                                                <i class="bx bx-transfer me-1"></i>Serah terima
                                             </button>
                                         @elseif ($asset->status == 'Pending Inspection')
-                                            <button wire:click="inspectAsset({{ $asset->id }})" wire:loading.attr="disabled" wire:target="inspectAsset({{ $asset->id }})" class="btn btn-sm btn-warning">
-                                                <span wire:loading.remove wire:target="inspectAsset({{ $asset->id }})"><i class="bx bx-search-alt-2 me-1"></i>Inspeksi</span>
-                                                <span wire:loading wire:target="inspectAsset({{ $asset->id }})"><span class="spinner-border spinner-border-sm" role="status"></span></span>
+                                            <button type="button" wire:click="$dispatch('openInspectionForAsset', { assetId: {{ $asset->id }} })" class="btn btn-sm btn-warning">
+                                                <i class="bx bx-search-alt-2 me-1"></i>Inspeksi
                                             </button>
                                         @elseif ($asset->status == 'Pre-Used' && $asset->holder_user_id && $asset->holder_user_id != Auth::id())
                                             <button wire:click="SendFUWhatApp({{ $asset->holder_user_id }})" wire:loading.attr="disabled" wire:target="SendFUWhatApp({{ $asset->holder_user_id }})" class="btn btn-sm btn-outline-success" title="Ingatkan penerima untuk konfirmasi">
@@ -201,22 +202,40 @@
                                                 @endcan
                                                 @if (in_array($asset->status, ['Pre-Used', 'Used']))
                                                     <li>
-                                                        <a class="dropdown-item" href="#" wire:click.prevent="openReturnModal({{ $asset->id }})"
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="$dispatch('openReturnModal', { assetId: {{ $asset->id }} })"
                                                             wire:confirm="Kembalikan aset {{ $asset->asset_number }} dari {{ $asset->holder->name ?? 'pemegang' }}?">
                                                             <i class="bx bx-undo me-2"></i>Pengembalian
                                                         </a>
                                                     </li>
                                                 @endif
+                                                @if ($asset->status === 'Free')
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="$dispatch('openLoanModal', { data: { asset_id: {{ $asset->id }}, mode: 'lend' } })">
+                                                            <i class="bx bx-time-five me-2"></i>Pinjamkan sementara
+                                                        </a>
+                                                    </li>
+                                                @elseif ($asset->status === 'Borrowed')
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="$dispatch('openLoanModal', { data: { asset_id: {{ $asset->id }}, mode: 'return' } })">
+                                                            <i class="bx bx-undo me-2"></i>Terima pengembalian pinjaman
+                                                        </a>
+                                                    </li>
+                                                    <li>
+                                                        <a class="dropdown-item" href="#" wire:click.prevent="$dispatch('openLoanModal', { data: { asset_id: {{ $asset->id }}, mode: 'extend' } })">
+                                                            <i class="bx bx-calendar-plus me-2"></i>Perpanjang pinjaman
+                                                        </a>
+                                                    </li>
+                                                @endif
                                                 @if (in_array($asset->status, \App\Livewire\Modal\Asset\Disposal::LOSABLE))
                                                     <li>
-                                                        <a class="dropdown-item text-warning" href="#" wire:click.prevent="openDisposal({{ $asset->id }}, 'LOST')">
+                                                        <a class="dropdown-item text-warning" href="#" wire:click.prevent="$dispatch('openDisposalModal', { data: { asset_id: {{ $asset->id }}, mode: 'LOST' } })">
                                                             <i class="bx bx-error-circle me-2"></i>Laporkan hilang
                                                         </a>
                                                     </li>
                                                 @endif
                                                 @if (in_array($asset->status, \App\Livewire\Modal\Asset\Disposal::DISPOSABLE))
                                                     <li>
-                                                        <a class="dropdown-item text-danger" href="#" wire:click.prevent="openDisposal({{ $asset->id }}, 'DISPOSE')">
+                                                        <a class="dropdown-item text-danger" href="#" wire:click.prevent="$dispatch('openDisposalModal', { data: { asset_id: {{ $asset->id }}, mode: 'DISPOSE' } })">
                                                             <i class="bx bx-trash me-2"></i>Ajukan disposal
                                                         </a>
                                                     </li>
@@ -495,5 +514,6 @@
     @livewire('modal.asset.bast')
     @livewire('modal.asset.pengembalian')
     @livewire('modal.asset.disposal')
+    @livewire('modal.asset.loan')
 </div>
 

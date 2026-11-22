@@ -155,24 +155,29 @@ class ManagePositions extends Component
 
     public function delete($id)
     {
+        $row = \App\Models\Position::find($id);
+        if (!$row) return;
+
+        // Cek pemakaian DULU (data master dihapus permanen / soft delete tidak ditolak database).
+        if ($reasons = \App\Support\MasterUsage::reasons('position', (int) $row->id)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => \App\Support\MasterUsage::message('Jabatan ' . $row->name, $reasons)]);
+            return;
+        }
+
         try {
-            // Cek apakah jabatan ini masih digunakan oleh user
-            $position=Position::find($id)->delete(); // Soft delete
-            if ($position) {
-                if (User::where('position_id', $id)->exists()) {
-                    session()->flash('error', 'Gagal menghapus jabatan. Jabatan ini masih digunakan oleh pengguna.');
-                    return;
-                }
-                // Hapus file jobdesk dari storage jika ada
-                if ($position->job_description_path) {
-                    Storage::disk('public')->delete($position->job_description_path);
-                }
-                $position->delete();
-                session()->flash('message', 'Jabatan berhasil dihapus.');
+            if ($row->job_description_path) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($row->job_description_path);
             }
-        } catch (\Exception $e) {
-            session()->flash('error', 'Gagal menghapus jabatan. ' . $e->getMessage());
+            $row->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => 'Jabatan ' . $row->name . ' berhasil dihapus.']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Hapus Jabatan #' . $row->id . ' gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => 'Jabatan ' . $row->name . ' masih terhubung dengan data lain.']);
         }
     }
-     public function updatedSearch(){ $this->resetPage(); }
+
+    public function updatedSearch()
+    {
+        $this->resetPage();
+    }
 }

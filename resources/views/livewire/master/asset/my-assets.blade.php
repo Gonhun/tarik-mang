@@ -57,11 +57,20 @@
                                             <button wire:click="confirmAccept({{ $asset->id }})" class="btn btn-sm btn-outline-info py-1 px-2 me-1" title="Edit Permission">
                                                 Accept
                                             </button>
+                                        @elseif($asset->status == 'Borrowed')
+                                            @php
+                                                $loanTrx = \App\Support\AssetLoan::activeLoan($asset);
+                                                $loanDue = $loanTrx ? (\App\Support\AssetLoan::meta($loanTrx, $asset->id)['due_date'] ?? null) : null;
+                                                $loanLate = $loanDue && now()->startOfDay()->gt(\Carbon\Carbon::parse($loanDue));
+                                            @endphp
+                                            <span class="badge bg-label-{{ $loanLate ? 'danger' : 'warning' }}">
+                                                Pinjaman · kembali {{ $loanDue ? \Carbon\Carbon::parse($loanDue)->locale('id')->isoFormat('D MMM YYYY') : '-' }}{{ $loanLate ? ' (terlambat)' : '' }}
+                                            </span>
                                         @elseif($asset->status == 'Used')
-                                            <button wire:click="openReturnModal({{ $asset->id }})" wire:loading.attr="disabled" wire:target="openReturnModal({{ $asset->id }})" class="btn btn-sm btn-warning mb-0">
+                                            <button type="button" wire:click="$dispatch('openReturnModal', { assetId: {{ $asset->id }} })" class="btn btn-sm btn-warning mb-0">
                                                 Kembalikan
                                             </button>
-                                            <button wire:click="reportLost({{ $asset->id }})" wire:loading.attr="disabled" wire:target="reportLost({{ $asset->id }})" class="btn btn-sm btn-outline-danger mb-0 ms-1">
+                                            <button type="button" wire:click="$dispatch('openDisposalModal', { data: { asset_id: {{ $asset->id }}, mode: 'LOST' } })" class="btn btn-sm btn-outline-danger mb-0 ms-1">
                                                 Laporkan hilang
                                             </button>
                                            

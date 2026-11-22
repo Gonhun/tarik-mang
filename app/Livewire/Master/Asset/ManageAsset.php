@@ -288,7 +288,8 @@ class ManageAsset extends Component
             ->groupBy('status')
             ->orderBy('status')
             ->pluck('total', 'status');
-        $this->statuses = $statusCounts->keys()->map(fn ($s) => (object) ['status' => $s]);
+        // Daftar status sebagai teks biasa (dipakai dropdown status di form aset).
+        $this->statuses = $statusCounts->keys()->values()->all();
 
         $query = Asset::with([
             'assetType:id,name', 'assetBrand:id,name', 'assetSeries:id,name,material_code',

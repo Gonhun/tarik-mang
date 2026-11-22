@@ -126,14 +126,24 @@ class ManageJobsites extends Component
         $this->openModal();
     }
 
-    public function delete($id) // Method delete jika Anda membuat CRUD lengkap
+    public function delete($id)
     {
+        $row = \App\Models\Jobsite::find($id);
+        if (!$row) return;
+
+        // Cek pemakaian DULU (data master dihapus permanen / soft delete tidak ditolak database).
+        if ($reasons = \App\Support\MasterUsage::reasons('jobsite', (int) $row->id)) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => \App\Support\MasterUsage::message('Jobsite ' . $row->name, $reasons)]);
+            return;
+        }
+
         try {
-            Jobsite::find($id)->delete(); // Asumsi menggunakan SoftDeletes jika ada
-            session()->flash('message', 'Jobsite berhasil dihapus.');
-        } catch (\Exception $e) {
-            session()->flash('error', 'Gagal menghapus jobsite. Kemungkinan masih terhubung dengan data lain.');
+            $row->delete();
+            $this->dispatch('swal:success', ['title' => 'Dihapus', 'text' => 'Jobsite ' . $row->name . ' berhasil dihapus.']);
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('Hapus Jobsite #' . $row->id . ' gagal: ' . $e->getMessage());
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dihapus', 'text' => 'Jobsite ' . $row->name . ' masih terhubung dengan data lain.']);
         }
     }
-   
+
 }

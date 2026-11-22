@@ -111,6 +111,11 @@ class AssetDetail extends Component
 
         foreach ($transactions as $trx) {
             [$label, $icon, $color] = self::TRANSACTION_META[$trx->transaction_type] ?? [$trx->transaction_type, 'bx-file', 'secondary'];
+            if (str_starts_with((string) $trx->notes, \App\Support\AssetLoan::TAG)) {
+                [$label, $icon, $color] = ['Peminjaman sementara', 'bx-time-five', 'warning'];
+            } elseif (str_starts_with((string) $trx->notes, \App\Support\AssetLoan::RETURN_TAG)) {
+                [$label, $icon, $color] = ['Kembali dari pinjaman', 'bx-undo', 'secondary'];
+            }
 
             $description = match ($trx->transaction_type) {
                 'HANDOVER' => 'Dari ' . ($trx->fromUser->name ?? 'gudang') . ' kepada ' . ($trx->toUser->name ?? '-'),

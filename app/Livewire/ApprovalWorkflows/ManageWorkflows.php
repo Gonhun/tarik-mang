@@ -191,7 +191,7 @@ class ManageWorkflows extends Component
             'preview' => $preview,
             'usedBy' => $usedBy,
             'jobsites' => \App\Models\Jobsite::orderBy('code')->get(['id', 'code', 'name']),
-            'typeLabels' => \App\Support\Workflow::LABELS,
+            'typeLabels' => \App\Support\Workflow::labels(),
         ]);
     }
 }

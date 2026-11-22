@@ -55,7 +55,7 @@
                                                     <i class="bx bx-edit text-sm"></i>
                                                 </button>
                                                 <button wire:click="delete({{ $positionlevel->id }})"
-                                                        onclick="confirm('Apakah Anda yakin ingin menghapus Level jabatan ini: {{ $positionlevel->name }}?') || event.stopImmediatePropagation()"
+                                                        wire:confirm="Apakah Anda yakin ingin menghapus Level jabatan ini: {{ $positionlevel->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Jabatan">
                                                     <i class="bx bx-delete text-sm"></i>
                                                 </button>

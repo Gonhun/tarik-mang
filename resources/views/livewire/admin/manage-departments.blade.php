@@ -48,7 +48,7 @@
                                                     <i class="bx bx-edit text-sm"></i>
                                                 </button>
                                                 {{-- <button wire:click="delete({{ $department->id }})"
-                                                        onclick="confirm('Apakah Anda yakin ingin menghapus departemen ini: {{ $department->code }} - {{ $department->name }}?') || event.stopImmediatePropagation()"
+                                                        wire:confirm="Apakah Anda yakin ingin menghapus departemen ini: {{ $department->code }} - {{ $department->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" title="Hapus Departemen">
                                                     <i class="far fa-trash-alt text-sm"></i>
                                                 </button> --}}

@@ -29,7 +29,7 @@ class Whatsapp extends Component
      */
     public function mount()
     {
-        $this->fetchGroupData();
+        // Data API dimuat setelah halaman tampil (wire:init) agar halaman tidak menunggu API.
     }
 
     /**

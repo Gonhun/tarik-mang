@@ -58,7 +58,7 @@
                                                     <i class="fas fa-edit text-sm"></i>
                                                 </button>
                                                 <button wire:click="delete({{ $entity->id }})"
-                                                        onclick="confirm('Apakah Anda yakin ingin menghapus entitas ini: {{ $entity->code }} - {{ $entity->name }}?') || event.stopImmediatePropagation()"
+                                                        wire:confirm="Apakah Anda yakin ingin menghapus entitas ini: {{ $entity->code }} - {{ $entity->name }}?"
                                                         class="btn btn-link text-danger text-gradient p-1 mb-0" data-bs-toggle="tooltip" data-bs-placement="top" title="Hapus Entitas">
                                                     <i class="far fa-trash-alt text-sm"></i>
                                                 </button>
@@ -122,25 +122,3 @@
     @endif
 </div>
 
-@push('scripts')
-<script>
-    // Untuk inisialisasi tooltip Bootstrap jika Anda menggunakannya
-    document.addEventListener('livewire:load', function () {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-    // Re-initialize tooltips after Livewire updates the DOM
-    Livewire.hook('message.processed', (message, component) => {
-        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
-        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
-            var existingTooltip = bootstrap.Tooltip.getInstance(tooltipTriggerEl);
-            if (existingTooltip) {
-                existingTooltip.dispose();
-            }
-            return new bootstrap.Tooltip(tooltipTriggerEl)
-        })
-    });
-</script>
-@endpush

@@ -27,9 +27,42 @@ class Workflow
 
     public const ADMIN_HINT = 'Hubungi Administrator untuk mengaturnya di menu Admin › Workflow.';
 
+    /**
+     * Master jenis transaksi dari config/transaction_types.php.
+     *
+     * @return array<string, array{label:string, deskripsi:string, dipakai_di:array, fallback:?string, aktif:bool, wajib:bool}>
+     */
+    public static function types(bool $onlyActive = false): array
+    {
+        $types = config('transaction_types', []);
+        if (!$types) {
+            // Cadangan bila file config belum ter-load.
+            $types = collect(self::LABELS)->map(fn ($l) => ['label' => ucfirst($l), 'deskripsi' => '', 'dipakai_di' => [], 'fallback' => null, 'aktif' => true, 'wajib' => true])->all();
+        }
+
+        return $onlyActive ? array_filter($types, fn ($t) => $t['aktif'] ?? true) : $types;
+    }
+
+    /** Label huruf kecil untuk kalimat, mis. "mutasi aset". */
     public static function label(string $type): string
     {
-        return self::LABELS[$type] ?? strtolower($type);
+        $label = self::types()[$type]['label'] ?? self::LABELS[$type] ?? $type;
+
+        return mb_strtolower($label);
+    }
+
+    /** [kode => label huruf kecil] untuk tampilan. */
+    public static function labels(): array
+    {
+        return array_map(fn ($t) => mb_strtolower($t['label']), self::types());
+    }
+
+    /** Kode fallback dari config (mis. LOST -> DISPOSED). */
+    public static function fallbacks(string $type): array
+    {
+        $fb = self::types()[$type]['fallback'] ?? null;
+
+        return $fb ? [$fb] : [];
     }
 
     /**
@@ -200,7 +233,7 @@ class Workflow
 
         return array_values(array_map(
             fn ($t) => self::label($t),
-            array_filter(['REQUEST_ASSET', 'MUTATION', 'DISPOSED', 'REQUEST_LICENSE'], fn ($t) => !in_array($t, $configured, true))
+            array_filter(array_keys(array_filter(self::types(true), fn ($t) => $t['wajib'] ?? true)), fn ($t) => !in_array($t, $configured, true))
         ));
     }
 }

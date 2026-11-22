@@ -598,13 +598,21 @@ class ShowAssetRequest extends Component
                             // Update status aset fisik menjadi 'Pending Mutation'
                             $item->assignedAsset->update(['status' => 'Pending Mutation']);
                         }
-                        $this->generateMutationApprovalSteps($mutationTransaction);
-                        // Kirim notifikasi ke PIC jobsite asal untuk melakukan pelepasan aset
-                        $originJobsite = \App\Models\Jobsite::find($originJobsiteId);
-                        $picUser = $originJobsite?->picUser; // pastikan relasi picUser ada di model Jobsite
-                        if ($picUser) {
-                            $msg = "Halo {$picUser->name},\n\nTerdapat permintaan mutasi aset dari Jobsite *{$this->assetRequest->jobsite->code}* untuk memenuhi pengajuan aset No. *{$this->assetRequest->request_number}*.\n\nMohon untuk melakukan validasi dan proses pelepasan aset sesuai permintaan tersebut di ams.binasaranasukses.co.id. Terima kasih.";
-                            sendMessageWithWhatsApp($picUser->whatsapp, $msg);
+                        // Tidak dibuat tahap approval: persetujuan sudah diberikan lewat workflow pengajuan aset,
+                        // mutasi langsung menunggu pelepasan oleh site asal (Pending Release).
+                        // Notifikasi ke tim IT site asal untuk melepas aset.
+                        $itOrigin = User::where('department_id', config('app.it_department_id'))
+                            ->where('jobsite_id', $originJobsiteId)->whereNotNull('whatsapp')->limit(3)->get();
+                        foreach ($itOrigin as $picUser) {
+                            $msg = "Halo {$picUser->name},\n\nTerdapat permintaan mutasi aset ({$mutationTransaction->transaction_number}) dari Jobsite *{$this->assetRequest->jobsite->code}* untuk memenuhi pengajuan aset No. *{$this->assetRequest->request_number}*.\n\nMohon lakukan pelepasan aset di menu Mutasi: " . route('asset.mutasi-status', $mutationTransaction->id);
+                            // Dikirim setelah commit; kegagalan WA tidak membatalkan proses.
+                            DB::afterCommit(function () use ($picUser, $msg) {
+                                try {
+                                    sendMessageWithWhatsApp($picUser->whatsapp, $msg);
+                                } catch (\Throwable $e) {
+                                    Log::warning('WA pelepasan mutasi gagal: ' . $e->getMessage());
+                                }
+                            });
                         }
                     }
                 }

@@ -215,18 +215,30 @@
                     @endif
                 </div>
                 <div class="card-body">
+                    @if ($approvalsNotNeeded && $approvals->where('status', 'Pending')->isNotEmpty() && $approvals->where('status', '!=', 'Pending')->isEmpty())
+                        <div class="alert alert-secondary small py-2">
+                            <i class="bx bx-info-circle"></i>
+                            @if (str_contains((string) $t->notes, 'Pengajuan Aset No'))
+                                Mutasi ini dibuat otomatis dari pengajuan aset yang <strong>sudah disetujui</strong>, jadi tidak memerlukan approval terpisah. Tahap di bawah adalah sisa data lama.
+                            @else
+                                Transaksi ini sudah melewati tahap persetujuan; tahap yang tersisa tidak diperlukan.
+                            @endif
+                        </div>
+                    @endif
                     @if ($approvals->isEmpty())
-                        <p class="text-muted small mb-0">Transaksi ini tidak memiliki tahapan persetujuan.</p>
+                        <p class="text-muted small mb-0">{{ $approvalsNotNeeded ? 'Tidak memerlukan tahapan persetujuan.' : 'Transaksi ini tidak memiliki tahapan persetujuan.' }}</p>
                     @else
                         <ul class="list-unstyled mb-0 trx-timeline">
                             @foreach ($approvals as $ap)
                                 @php
                                     $isCurrent = $currentApproval && $currentApproval->id === $ap->id;
                                     $isAuto = $ap->notes === \App\Support\Workflow::AUTO_NOTE;
-                                    [$c, $icon, $label] = match ($ap->status) {
-                                        'Approved' => ['success', 'bx-check', $isAuto ? 'Otomatis (pengaju)' : 'Disetujui'],
-                                        'Rejected' => ['danger', 'bx-x', 'Ditolak'],
-                                        default => $isCurrent ? ['warning', 'bx-time-five', 'Menunggu'] : ['secondary', 'bx-dots-horizontal-rounded', 'Belum giliran'],
+                                    [$c, $icon, $label] = match (true) {
+                                        $ap->status === 'Approved' => ['success', 'bx-check', $isAuto ? 'Otomatis (pengaju)' : 'Disetujui'],
+                                        $ap->status === 'Rejected' => ['danger', 'bx-x', 'Ditolak'],
+                                        $approvalsNotNeeded => ['secondary', 'bx-minus', 'Tidak diperlukan'],
+                                        $isCurrent => ['warning', 'bx-time-five', 'Menunggu'],
+                                        default => ['secondary', 'bx-dots-horizontal-rounded', 'Belum giliran'],
                                     };
                                 @endphp
                                 <li class="trx-timeline-item {{ $isCurrent ? 'is-current' : '' }}">
@@ -234,7 +246,7 @@
                                     <div class="d-flex flex-wrap justify-content-between gap-2">
                                         <div>
                                             <span class="fw-semibold">Tahap {{ $ap->step_order }} · {{ $ap->approver_role_name }}</span>
-                                            <span class="d-block small text-muted">{{ $ap->approver->name ?? 'Approver belum ditentukan' }}</span>
+                                            <span class="d-block small text-muted">{{ $ap->approver->name ?? ($approvalsNotNeeded ? '—' : 'Approver belum ditentukan') }}</span>
                                         </div>
                                         <span class="badge bg-label-{{ $c }} align-self-start">{{ $label }}</span>
                                     </div>
