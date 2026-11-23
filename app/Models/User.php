@@ -11,11 +11,12 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable; // Import Contract
 use OwenIt\Auditing\Auditable as AuditableTrait; // Import Trait
 use Spatie\Permission\Traits\HasRoles;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements Auditable
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable,AuditableTrait,HasRoles;
+    use HasFactory, Notifiable,AuditableTrait,HasRoles, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.

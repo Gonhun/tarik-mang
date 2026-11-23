@@ -4,6 +4,7 @@ namespace App\Livewire\AssetMutations;
 
 use Livewire\Component;
 use App\Models\AssetTransaction;
+use App\Services\TransactionApprovalService;
 use App\Models\AssetTransactionApproval;
 use App\Models\Asset;
 use App\Models\User;
@@ -71,19 +72,9 @@ class ShowAssetTransaction extends Component
      */
     public function canApprove(AssetTransactionApproval $approval): bool
     {
-        // 1. Approval milik transaksi yang sedang dibuka.
-        // 2. Tahap masih Pending dan transaksi belum selesai/ditolak.
-        // 3. User yang login adalah approver yang ditunjuk.
-        // 4. Giliran: tidak ada tahap sebelumnya yang masih Pending.
+        // Approval harus milik transaksi yang sedang dibuka; aturan giliran & approver ada di service (sama dengan API).
         return (int) $approval->asset_transaction_id === (int) $this->transaction->id
-            && $approval->status === 'Pending'
-            // Transaksi yang sudah lewat tahap approval (mis. Pending Release dari pengajuan aset) tidak bisa di-approve lagi.
-            && !in_array($this->transaction->fresh()->status, \App\Support\TransactionApprovalRepair::CLOSED_STATUSES, true)
-            && Auth::id() == $approval->approver_user_id
-            && !AssetTransactionApproval::where('asset_transaction_id', $approval->asset_transaction_id)
-                ->where('step_order', '<', $approval->step_order)
-                ->where('status', 'Pending')
-                ->exists();
+            && app(TransactionApprovalService::class)->canDecide($approval, Auth::user());
     }
 
     /**
@@ -162,207 +153,19 @@ class ShowAssetTransaction extends Component
             'it_selected_stock_asset_id' => ($this->it_fulfillment_type === 'stock' ? 'required|exists:assets,id' : 'nullable'),
         ]);
 
-        DB::transaction(function () use ($approval) {
-            // 1. Update record approval saat ini
-            $approval->update([
-                'status' => ($this->approval_action === 'approve' ? 'Approved' : 'Rejected'),
-                'action_at' => now(),
-                'action_by_user_id' => Auth::id(),
-                'notes' => $this->approval_notes,
-            ]);
+        // Pemenuhan IT dari stok (tahap "Kasi IT") tidak lagi dipakai di workflow transaksi.
+        if ($approval->approver_role_name === 'Kasi IT' && $this->it_fulfillment_type === 'stock') {
+            session()->flash('error', 'Pemenuhan dari stok tidak tersedia di tahap ini.');
+            return;
+        }
 
-            $transaction = $approval->transaction;
-            $finalAction = 'continue'; // Default action is to continue the workflow
-
-            // 2. Tentukan status transaksi utama selanjutnya
-            if ($this->approval_action === 'reject') {
-                $transaction->status = 'Rejected';
-                $finalAction = 'notify_requester_rejected';
-            } else { // Jika 'approve'
-                
-                // Cek apakah ini tahap IT dengan logika khusus
-                if ($approval->approver_role_name === 'Kasi IT' && $this->it_fulfillment_type === 'stock') {
-                    // Logika untuk pemenuhan dari stok, ini mungkin akan mengakhiri alur
-                    // Anda perlu memindahkan logika 'fulfillFromLocalStock' dan 'initiateAssetMutation' ke sini
-                    // dan mengaturnya untuk mengembalikan status final.
-                    // Untuk contoh ini, kita asumsikan 'stock' langsung 'Completed'.
-                    $transaction->status = 'Completed'; 
-                    // Kaitkan aset stok ke item permintaan
-                    $firstItem = $transaction->items->first();
-                    $firstItem->update(['assigned_asset_id' => $this->it_selected_stock_asset_id]);
-                    // Update status aset stok
-                    Asset::find($this->it_selected_stock_asset_id)->update(['status' => 'Used', 'holder_user_id' => $transaction->requester_user_id]);
-                    $finalAction = 'notify_requester_completed_from_stock';
-                } else {
-                    // Logika approval standar: cari tahap berikutnya
-                    $nextApproval = AssetTransactionApproval::where('asset_transaction_id', $transaction->id)
-                        ->where('status', 'Pending')->orderBy('step_order', 'asc')->first();
-
-                    if ($nextApproval) {
-                        $transaction->status = 'Pending Approval' ;
-                        $finalAction = 'notify_next_approver';
-                    } else {
-                       if($transaction->transaction_type === 'DISPOSED'){
-                        $transaction->status = 'Completed';
-                        $finalAction = 'process_and_notify_requester_approved';
-                       }else{
-                        $transaction->status = 'Pending Release';
-                        $finalAction = 'process_and_notify_requester_approved';
-                       }
-                    }
-                }
-            }
-
-            $transaction->save();
-            
-            // 3. Jalankan aksi setelahnya (misal: notifikasi) di luar transaksi DB jika memungkinkan
-            // Di sini kita jalankan di dalam untuk kesederhanaan, tapi pertimbangkan Queue untuk notifikasi
-            switch($finalAction){
-                case 'notify_next_approver':
-                    $this->sendNotificationToApprover($nextApproval);
-                    break;
-                case 'process_and_notify_requester_approved':
-                    $this->processFullyApprovedRequest($transaction);
-                    $this->sendNotificationToRequester($transaction, 'Pengajuan Anda Telah Disetujui Sepenuhnya');
-                    break;
-                case 'notify_requester_rejected':
-                    $this->processFullyApprovedRequest($transaction);
-                     $this->sendNotificationToRequester($transaction, 'Pengajuan Anda Ditolak');
-
-                    break;
-                case 'notify_requester_completed_from_stock':
-                     $this->sendNotificationToRequester($transaction, 'Pengajuan Anda Dipenuhi dari Stok');
-                    break;
-            }
-        });
+        app(TransactionApprovalService::class)->decide($approval, Auth::user(), $this->approval_action, $this->approval_notes);
 
         session()->flash('message', 'Status pengajuan berhasil diperbarui.');
         $this->closeApprovalModal();
         $this->transaction->refresh(); // Muat ulang data
     }
     
-    /**
-     * Kirim notifikasi WhatsApp ke approver berikutnya.
-     */
-    protected function sendNotificationToApprover(AssetTransactionApproval $approval)
-    {
-        // Ambil data user approver
-        $approver = $approval->approver;
-        if (!$approver || !$approver->whatsapp) {
-            Log::warning('Gagal kirim WA: Approver tidak punya nomor telepon.', ['approval_id' => $approval->id]);
-            return;
-        }
-
-        $transaction = $approval->transaction;
-        $message = "Halo {$approver->name},\n\n"
-            . "Ada pengajuan transaksi aset #{$transaction->transaction_number} yang membutuhkan persetujuan Anda.\n"
-            . "Jenis: " . ucwords(strtolower(str_replace('_', ' ', $transaction->transaction_type))) . "\n"
-            . "Tanggal: " . \Carbon\Carbon::parse($transaction->transaction_date)->format('d-m-Y') . "\n"
-            . "Status: {$transaction->status}\n\n"
-            . "Silakan login ke aplikasi AMS untuk melakukan approval."
-            . "ams.binasaranasukses.co.id";
-
-            $message .= "\n" . route('asset.mutasi-status', $transaction->id);
-            try {
-                sendMessageWithWhatsApp($approver->whatsapp, $message);
-            } catch (\Throwable $e) {
-                Log::warning('Gagal kirim WA approver: ' . $e->getMessage());
-            }
-    }
-
-    /**
-     * Kirim notifikasi WhatsApp ke pemohon/requester.
-     */
-    protected function sendNotificationToRequester(AssetTransaction $transaction, string $subject)
-    {
-        // Ambil data user pemohon/requester
-        $requester = $transaction->creator;
-        if (!$requester || !$requester->whatsapp) {
-            Log::warning('Gagal kirim WA: Requester tidak punya nomor telepon.', ['transaction_id' => $transaction->id]);
-            return;
-        }
-
-        $message = "Halo {$requester->name},\n\n"
-            . "{$subject}\n"
-            . "Transaksi aset #{$transaction->transaction_number}\n"
-            . "Jenis: " . ucwords(strtolower(str_replace('_', ' ', $transaction->transaction_type))) . "\n"
-            . "Tanggal: " . \Carbon\Carbon::parse($transaction->transaction_date)->format('d-m-Y') . "\n"
-            . "Status: {$transaction->status}\n\n"
-            . "Cek detail di aplikasi AMS.";
-
-        sendMessageWithWhatsApp($requester->whatsapp, $message);
-    }
-
-    /**
-     * Helper untuk mengirim WhatsApp (dummy, ganti dengan integrasi API WA sebenarnya).
-     */
-    
-    protected function processFullyApprovedRequest(AssetTransaction $transaction) {
-        $transaction->loadMissing('items.asset');
-
-        // Disposal / kehilangan: pulihkan aset bila ditolak, hapus buku bila disetujui penuh.
-        if ($transaction->transaction_type === 'DISPOSED') {
-            if ($transaction->status === 'Rejected') {
-                \App\Support\AssetDisposal::restoreAfterRejection($transaction);
-            } elseif (in_array($transaction->status, ['Approved', 'Completed'], true)) {
-                \App\Support\AssetDisposal::completeApproval($transaction);
-            }
-            return;
-        }
-
-        // Mutasi: aset baru pindah site saat site tujuan konfirmasi terima (halaman Mutasi).
-        // Disetujui -> tetap "Pending Mutation" menunggu pelepasan. Ditolak -> pulihkan status & pemegang semula.
-        if ($transaction->transaction_type === 'MUTATION') {
-            if ($transaction->status === 'Rejected') {
-                foreach ($transaction->items as $item) {
-                    if ($item->asset && $item->asset->status === 'Pending Mutation') {
-                        $meta = is_array($item->metadata) ? $item->metadata : [];
-                        $item->asset->update([
-                            'status' => $meta['previous_status'] ?? 'Free',
-                            'holder_user_id' => array_key_exists('previous_holder_user_id', $meta) ? $meta['previous_holder_user_id'] : $item->asset->holder_user_id,
-                        ]);
-                    }
-                }
-            }
-            return;
-        }
-
-        if ($transaction->status === 'Rejected') {
-            // Jika transaksi di-reject, update status aset terkait (jika perlu)
-            foreach ($transaction->items as $item) {
-                if ($item->asset) {
-                    // Misal: kembalikan status aset ke 'Free' jika sebelumnya 'Pending Mutation'
-                    if ($item->asset->status === 'Pending Mutation' || $item->asset->status === 'Pre Disposed') {
-                        $item->asset->status = 'Free';
-                        $item->asset->save();
-                    }
-                }
-            }
-            // Kirim notifikasi ke pemohon bahwa transaksi ditolak
-            // $this->sendNotificationToRequester($transaction, "Transaksi mutasi aset Anda telah DITOLAK.");
-        } elseif ($transaction->status === 'Approved' || $transaction->status === 'Completed') {
-            // Jika transaksi di-approve, update status aset terkait
-            foreach ($transaction->items as $item) {
-                if ($item->asset) {
-                    if ($item->asset->status === 'Pending Mutation') {
-                        $item->asset->jobsite_id = $transaction->to_jobsite_id;
-                        $item->asset->status = 'Free';
-                        $item->asset->save();
-                    }elseif($item->asset->status === 'Pre Disposed'){
-                        $item->asset->status = 'Disposed';
-                        $item->asset->save();
-                    }
-                    // Misal: pindahkan aset ke jobsite tujuan dan update status
-                   
-                }
-            }
-            // Kirim notifikasi ke pemohon bahwa transaksi disetujui
-            // $this->sendNotificationToRequester($transaction, "Transaksi mutasi aset Anda telah DISETUJUI dan diproses.");
-        }
-        $transaction->save();
-        $transaction->refresh();
-     }
-
     // ------------------------------------------------------------------
     // Perbaikan approval transaksi yang sudah berjalan (khusus admin)
     // ------------------------------------------------------------------

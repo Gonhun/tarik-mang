@@ -11,7 +11,8 @@ document.addEventListener('alpine:init', () => {
     // Elemen DOM & instance pihak ketiga disimpan di closure, BUKAN di state Alpine:
     // state Alpine dibungkus Proxy reaktif, dan getter DOM (select.options, .value, dst.)
     // melempar "Illegal invocation" bila dipanggil lewat Proxy.
-    Alpine.data('searchSelect', (placeholder = 'Cari...') => {
+    // resets: properti Livewire yang langsung dikosongkan saat pilihan ini berganti (mis. Tipe -> Merek & Seri).
+    Alpine.data('searchSelect', (placeholder = 'Cari...', resets = []) => {
       let sel = null, observer = null, unhook = null, model = null;
       return {
         open: false,
@@ -120,6 +121,8 @@ document.addEventListener('alpine:init', () => {
         choose(opt) {
             if (!opt || opt.disabled) return;
             if (sel.value !== opt.value) {
+                // Kosongkan pilihan turunan saat itu juga (tanpa menunggu server); ikut terkirim di request berikutnya.
+                if (this.$wire) resets.forEach((prop) => this.$wire.set(prop, null, false));
                 sel.value = opt.value;
                 sel.dispatchEvent(new Event('input', { bubbles: true }));
                 sel.dispatchEvent(new Event('change', { bubbles: true }));

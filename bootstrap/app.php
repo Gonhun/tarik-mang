@@ -15,5 +15,6 @@ return Application::configure(basePath: dirname(__DIR__))
         //
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // API mobile selalu menerima JSON (termasuk 401/403/404/422), bukan halaman HTML / redirect login.
+        $exceptions->shouldRenderJsonWhen(fn ($request) => $request->is('api/*') || $request->expectsJson());
     })->create();

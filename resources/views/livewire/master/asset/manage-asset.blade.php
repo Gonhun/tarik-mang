@@ -203,7 +203,7 @@
                                                 @if (in_array($asset->status, ['Pre-Used', 'Used']))
                                                     <li>
                                                         <a class="dropdown-item" href="#" wire:click.prevent="$dispatch('openReturnModal', { assetId: {{ $asset->id }} })"
-                                                            wire:confirm="Kembalikan aset {{ $asset->asset_number }} dari {{ $asset->holder->name ?? 'pemegang' }}?">
+                                                            wire:confirm="Kembalikan aset {{ $asset->asset_number }} {{ $asset->holder ? 'dari ' . $asset->holder->name : 'ke stok (tidak ada pemegang tercatat)' }}?">
                                                             <i class="bx bx-undo me-2"></i>Pengembalian
                                                         </a>
                                                     </li>
@@ -362,7 +362,7 @@
                             <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="asset_type_id_modal_asset" class="form-label">Tipe Aset <span class="text-danger">*</span></label>
-                                    <x-search-select placeholder="Cari tipe...">
+                                    <x-search-select placeholder="Cari tipe..." resets="asset_brand_id,asset_series_id">
                                     <select wire:model="asset_type_id" wire:change="changeAssetTypeId" id="asset_type_id_modal_asset" class="form-select @error('asset_type_id') is-invalid @enderror">
                                         <option value="">-- Pilih Tipe --</option>
                                         @foreach ($assetTypes as $type)
@@ -374,7 +374,7 @@
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="asset_brand_id_modal_asset" class="form-label">Merek Aset <span class="text-danger">*</span></label>
-                                    <x-search-select placeholder="Cari merek...">
+                                    <x-search-select placeholder="Cari merek..." resets="asset_series_id">
                                     <select wire:model="asset_brand_id" wire:change="changeAssetBrandId" id="asset_brand_id_modal_asset" class="form-select @error('asset_brand_id') is-invalid @enderror" @if(count($assetBrands) == 0 && !$asset_type_id) disabled @endif>
                                         <option value="">-- Pilih Merek --</option>
                                         @if(count($assetBrands) > 0)
@@ -492,7 +492,16 @@
                                 </div>
                                 <div class="col-md-4 mb-3" >
                                     <label for="status_modal_cost_center" class="form-label">Cost Center</label>
-                                    <input type="text" class="form-control @error('cost_center') is-invalid @enderror" id="status_modal_cost_center" wire:model.live="cost_center" readonly>
+                                    <div class="input-group">
+                                        <input type="text" class="form-control @error('cost_center') is-invalid @enderror" id="status_modal_cost_center" wire:model.live="cost_center" readonly
+                                               wire:loading.class="text-muted" wire:target="jobsite_id, departement_id, numberAssetTemporarry">
+                                        <span class="input-group-text" wire:loading.flex wire:target="jobsite_id, departement_id, numberAssetTemporarry">
+                                            <span class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></span>
+                                        </span>
+                                    </div>
+                                    <small class="text-primary mt-1" wire:loading.block wire:target="jobsite_id, departement_id, numberAssetTemporarry" role="status">
+                                        Memperbarui cost center… tunggu sebelum menyimpan.
+                                    </small>
                                     @error('cost_center') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="col-md-4 mb-3" hidden>
@@ -525,9 +534,13 @@
                         <div class="modal-footer">
                             <button type="button" class="btn btn-secondary" wire:click="closeModal">Batal</button>
                             @if(!empty($cost_center_id))
-                            <button type="submit" class="btn btn-primary">
-                                 <span wire:loading.remove wire:target="store">{{ $asset_id ? 'Simpan Perubahan' : 'Simpan Aset' }}</span>
-                                 <span wire:loading wire:target="store">Menyimpan...</span>
+                            {{-- Dikunci selama data form (cost center, merek, seri, nomor aset) masih dimuat ulang agar yang tersimpan sudah final. --}}
+                            <button type="submit" class="btn btn-primary"
+                                    wire:loading.attr="disabled"
+                                    wire:target="store, jobsite_id, departement_id, numberAssetTemporarry, changeAssetTypeId, changeAssetBrandId">
+                                 <span wire:loading.remove wire:target="store, jobsite_id, departement_id, numberAssetTemporarry, changeAssetTypeId, changeAssetBrandId">{{ $asset_id ? 'Simpan Perubahan' : 'Simpan Aset' }}</span>
+                                 <span wire:loading wire:target="jobsite_id, departement_id, numberAssetTemporarry, changeAssetTypeId, changeAssetBrandId"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Memuat data…</span>
+                                 <span wire:loading wire:target="store"><span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Menyimpan...</span>
                             </button>
                             @endif
                         </div>

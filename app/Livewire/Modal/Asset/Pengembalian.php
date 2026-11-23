@@ -27,11 +27,23 @@ class Pengembalian extends Component
      */
     protected function canReturn(Asset $asset): bool
     {
+        return $this->isManager() || ($asset->holder_user_id && (int) $asset->holder_user_id === Auth::id());
+    }
+
+    protected function isManager(): bool
+    {
         $user = Auth::user();
 
-        return $user->isItStaff()
-            || $user->can('Master Asset')
-            || (int) $asset->holder_user_id === $user->id;
+        return $user->isItStaff() || $user->can('Master Asset');
+    }
+
+    /**
+     * Data lama: status Used/Pre-Used tapi pemegang kosong. Hanya pengelola aset yang boleh
+     * mengembalikannya ke stok, lewat alur inspeksi yang sama.
+     */
+    public function getWithoutHolderProperty(): bool
+    {
+        return $this->assetToReturn && !$this->assetToReturn->holder_user_id;
     }
 
     public function loadAssetToReturn($assetId)
@@ -42,8 +54,12 @@ class Pengembalian extends Component
             $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset tidak ditemukan atau Anda tidak berhak mengembalikannya.']);
             return;
         }
-        if (!in_array($asset->status, self::RETURNABLE_STATUSES, true) || !$asset->holder_user_id) {
-            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => "Aset {$asset->asset_number} berstatus {$asset->status} dan tidak sedang dipegang user, jadi tidak bisa dikembalikan."]);
+        if (!in_array($asset->status, self::RETURNABLE_STATUSES, true)) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => "Aset {$asset->asset_number} berstatus {$asset->status}, jadi tidak bisa dikembalikan."]);
+            return;
+        }
+        if (!$asset->holder_user_id && !$this->isManager()) {
+            $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => "Aset {$asset->asset_number} tidak tercatat punya pemegang. Hubungi tim IT untuk mengembalikannya ke stok."]);
             return;
         }
 
@@ -74,7 +90,9 @@ class Pengembalian extends Component
 
         // Ambil ulang dari database: status bisa berubah sejak modal dibuka.
         $asset = Asset::with('holder:id,name')->find($this->assetToReturn->id);
-        if (!$asset || !$this->canReturn($asset) || !in_array($asset->status, self::RETURNABLE_STATUSES, true) || !$asset->holder) {
+        $holderChanged = (int) $asset?->holder_user_id !== (int) $this->assetToReturn->holder_user_id;
+        if (!$asset || !$this->canReturn($asset) || !in_array($asset->status, self::RETURNABLE_STATUSES, true) || $holderChanged
+            || (!$asset->holder && !$this->isManager())) {
             $this->dispatch('swal:error', ['title' => 'Gagal', 'text' => 'Aset sudah tidak bisa dikembalikan (status atau pemegang sudah berubah).']);
             $this->closeModal();
             $this->dispatch('refreshAssetList');
@@ -90,7 +108,9 @@ class Pengembalian extends Component
                     'from_user_id' => $asset->holder_user_id,
                     'from_jobsite_id' => $asset->jobsite_id,
                     'to_jobsite_id' => $asset->jobsite_id,
-                    'notes' => "Pengembalian aset {$asset->asset_number} oleh {$asset->holder->name}",
+                    'notes' => $asset->holder
+                        ? "Pengembalian aset {$asset->asset_number} oleh {$asset->holder->name}"
+                        : "Pengembalian aset {$asset->asset_number} ke stok (status {$asset->status} tanpa pemegang tercatat)",
                     'status' => 'Pending Inspection',
                     'created_by_user_id' => Auth::id(),
                 ]);

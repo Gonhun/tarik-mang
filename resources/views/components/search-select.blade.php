@@ -1,14 +1,16 @@
-@props(['placeholder' => 'Cari...'])
+@props(['placeholder' => 'Cari...', 'resets' => ''])
 
 {{--
     Bungkus <select> biasa agar punya kolom pencarian. <select> tetap dipegang Livewire
     (wire:model / wire:change / @error tetap di <select>), widget-nya ada di form-widgets.js.
 
-    <x-search-select placeholder="Cari tipe...">
+    <x-search-select placeholder="Cari tipe..." resets="asset_brand_id,asset_series_id">
         <select wire:model="..." class="form-select">...</select>
     </x-search-select>
+
+    resets: properti Livewire yang langsung dikosongkan begitu pilihan ini berganti.
 --}}
-<div x-data="searchSelect(@js($placeholder))"
+<div x-data="searchSelect(@js($placeholder), @js(array_values(array_filter(array_map('trim', explode(',', $resets))))))"
      x-effect="syncFromWire()"
      @keydown.escape.stop="open && close(true)"
      @click.outside="open && close()"

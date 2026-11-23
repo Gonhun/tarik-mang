@@ -23,6 +23,12 @@
                                     <strong>Pemegang:</strong> {{ $assetToReturn->holder->name ?? '-' }}<br>
                                     <strong>Serial number:</strong> {{ $assetToReturn->serial_number ?: '-' }}
                                 </div>
+                                @if ($this->withoutHolder)
+                                    <div class="alert alert-warning small d-flex gap-2" role="alert">
+                                        <i class="bx bx-error fs-5 flex-shrink-0"></i>
+                                        <div>Aset ini berstatus <strong>{{ $assetToReturn->status }}</strong> tapi <strong>tidak punya pemegang tercatat</strong> (data lama). Pengembalian akan mengembalikannya ke stok lewat inspeksi IT.</div>
+                                    </div>
+                                @endif
                                 
                                 <div class="mb-3">
                                     <label for="returnCondition" class="form-label">Kondisi Aset Saat Dikembalikan <span class="text-danger">*</span></label>
@@ -37,7 +43,7 @@
                                 </div>
 
                                 <div class="mb-3">
-                                    <label for="returnNotes" class="form-label">Catatan Tambahan</label>
+                                    <label for="returnNotes" class="form-label">{{ $this->withoutHolder ? 'Alasan pengembalian (opsional)' : 'Catatan Tambahan' }}</label>
                                     <textarea wire:model.defer="returnNotes" id="returnNotes" class="form-control @error('returnNotes') is-invalid @enderror" rows="3" placeholder="Jelaskan detail kondisi atau alasan pengembalian..."></textarea>
                                     @error('returnNotes') <span class="text-danger small">{{ $message }}</span> @enderror
                                 </div>

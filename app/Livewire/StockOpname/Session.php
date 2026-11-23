@@ -2,9 +2,9 @@
 
 namespace App\Livewire\StockOpname;
 
-use App\Models\Asset;
 use App\Models\StockOpname;
 use App\Models\StockOpnameItem;
+use App\Services\StockOpnameService;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Locked;
 use Livewire\Attributes\Url;
@@ -55,129 +55,52 @@ class Session extends Component
 
     public function updatingSearch() { $this->resetPage(); }
 
-    /**
-     * Ambil nomor aset dari isi QR: bisa nomor aset langsung, atau link halaman aset (/asset/show/{nomor}).
-     */
+    /** Lihat StockOpnameService::extractCode() (tetap di sini karena dipakai halaman lain). */
     public static function extractCode(string $raw): string
     {
-        $raw = trim($raw);
-        if (preg_match('#/asset/show/([^/?\#]+)#i', $raw, $m)) {
-            return trim(urldecode($m[1]));
-        }
-
-        return $raw;
+        return StockOpnameService::extractCode($raw);
     }
 
     /** SN "kosong" yang tidak boleh dipakai untuk mencari aset. */
-    public const PLACEHOLDER_SN = ['-', '--', 'N/A', 'NA', 'NONE', '0', 'TIDAK ADA'];
+    public const PLACEHOLDER_SN = StockOpnameService::PLACEHOLDER_SN;
 
-    /**
-     * Cari aset dari kode hasil scan: No. aset -> No. aset lama -> Serial number (barcode batang SN).
-     *
-     * @return array{0: ?Asset, 1: string, 2: \Illuminate\Support\Collection} [aset, dicocokkan lewat, kandidat bila SN ganda]
-     */
+    /** Lihat StockOpnameService::findAsset() (tetap di sini karena dipakai halaman Peminjaman). */
     public static function findAsset(string $code, ?int $preferJobsiteId = null, array $with = []): array
     {
-        $code = trim($code);
-        // Kode kosong / placeholder (mis. "-" yang dipakai sebagai No. lama atau SN) tidak boleh mencocokkan aset mana pun.
-        if ($code === '' || in_array(mb_strtoupper($code), self::PLACEHOLDER_SN, true)) {
-            return [null, '', collect()];
-        }
-
-        $asset = Asset::with($with)->where('asset_number', $code)->first();
-        if ($asset) return [$asset, 'no_aset', collect()];
-
-        $asset = Asset::with($with)->where('old_asset_number', $code)->first();
-        if ($asset) return [$asset, 'no_lama', collect()];
-
-        $bySn = Asset::with($with)->where('serial_number', $code)->limit(5)->get();
-        if ($bySn->count() === 1) return [$bySn->first(), 'sn', collect()];
-        if ($bySn->count() > 1) {
-            // SN sama di beberapa aset: utamakan aset di site yang sedang diperiksa.
-            $here = $preferJobsiteId ? $bySn->where('jobsite_id', $preferJobsiteId) : collect();
-            if ($here->count() === 1) return [$here->first(), 'sn', collect()];
-            return [null, 'sn_ganda', $bySn];
-        }
-
-        return [null, '', collect()];
+        return StockOpnameService::findAsset($code, $preferJobsiteId, $with);
     }
 
     /** Dipanggil dari kamera (JS) atau form input. */
     public function scan($raw = null)
     {
         $opname = $this->opname();
-        if (!$opname->isOpen()) {
-            $this->last = ['type' => 'danger', 'title' => 'Sesi sudah ditutup', 'text' => 'Buka sesi baru untuk melanjutkan.'];
-            return;
-        }
-
-        $code = self::extractCode((string) ($raw ?? $this->code));
+        $code = StockOpnameService::extractCode((string) ($raw ?? $this->code));
         $this->code = '';
-        if ($code === '' || strlen($code) > 100) {
-            return;
-        }
-        if (in_array(mb_strtoupper($code), self::PLACEHOLDER_SN, true)) {
-            $this->last = ['type' => 'info', 'title' => 'Kode tidak valid', 'text' => "\"{$code}\" bukan No. aset / SN. Scan QR label atau barcode SN yang benar."];
-            $this->dispatch('opname-feedback', type: 'info');
+        // Kode kosong / terlalu panjang diabaikan tanpa umpan balik (mis. scanner USB mengirim Enter kosong).
+        if ($opname->isOpen() && ($code === '' || strlen($code) > 100)) {
             return;
         }
 
-        [$asset, $matchedBy, $candidates] = self::findAsset($code, $opname->jobsite_id, ['assetType:id,name', 'assetSeries:id,name', 'jobsite:id,code', 'holder:id,name']);
+        $res = app(StockOpnameService::class)->scan($opname, $code, Auth::user());
+        $this->last = ['type' => $res['type'], 'title' => $res['title'], 'text' => $res['text']];
 
-        // SN yang sama dipakai beberapa aset: jangan menebak, minta scan QR / No. aset.
-        if ($matchedBy === 'sn_ganda') {
-            $this->last = ['type' => 'warning', 'title' => "SN {$code} dipakai beberapa aset", 'text' => 'Cocok dengan: ' . $candidates->pluck('asset_number')->implode(', ') . '. Scan QR label atau ketik No. aset.'];
-            $this->dispatch('opname-feedback', type: 'warning');
+        if (!$opname->isOpen()) {
             return;
         }
-
-        // Sudah discan di sesi ini?
-        $dup = StockOpnameItem::where('stock_opname_id', $opname->id)
-            ->when($asset, fn ($q) => $q->where('asset_id', $asset->id), fn ($q) => $q->whereNull('asset_id')->where('scanned_code', $code))
-            ->first();
-        if ($dup) {
-            // Tampilkan lagi agar kondisi / lokasinya masih bisa dikoreksi.
-            $this->lastItemId = $dup->asset_id ? $dup->id : null;
+        if ($res['item']) {
+            // Kartu hasil: kondisi & lokasi bisa diisi/dikoreksi (hanya untuk aset terdaftar).
+            $this->lastItemId = $res['item']->asset_id ? $res['item']->id : null;
             $this->lastLocation = '';
-            $this->last = ['type' => 'info', 'title' => 'Sudah discan', 'text' => ($asset->asset_number ?? $code) . ' sudah tercatat ' . $dup->scanned_at?->locale('id')->diffForHumans() . '.'];
-            $this->dispatch('opname-feedback', type: 'info');
-            return;
         }
-
-        $result = !$asset ? 'not_registered' : ((int) $asset->jobsite_id === (int) $opname->jobsite_id ? 'found' : 'other_site');
-
-        StockOpnameItem::create([
-            'stock_opname_id' => $opname->id,
-            'asset_id' => $asset?->id,
-            'scanned_code' => $code,
-            'result' => $result,
-            // Kondisi default Baik; bisa diubah di kartu hasil setelah aset terlihat.
-            'condition' => $asset ? 'baik' : null,
-            'location_note' => null,
-            'asset_status_at_scan' => $asset?->status,
-            'asset_jobsite_id_at_scan' => $asset?->jobsite_id,
-            'scanned_by' => Auth::id(),
-            'scanned_at' => now(),
-        ]);
-
-        $this->lastItemId = StockOpnameItem::where('stock_opname_id', $opname->id)->latest('id')->value('id');
-        $this->lastLocation = '';
-
-        $desc = $asset ? trim(($asset->assetType->name ?? '') . ' ' . ($asset->assetSeries->name ?? '')) : '';
-        $this->last = match ($result) {
-            'found' => ['type' => 'success', 'title' => "Ditemukan: {$asset->asset_number}" . ($matchedBy === 'sn' ? ' (lewat SN)' : ''), 'text' => $desc . ($asset->holder ? ' · ' . $asset->holder->name : '') . " · status {$asset->status}"],
-            'other_site' => ['type' => 'warning', 'title' => "Aset site lain: {$asset->asset_number}" . ($matchedBy === 'sn' ? ' (lewat SN)' : ''), 'text' => "{$desc} tercatat di site " . ($asset->jobsite->code ?? '-') . ', bukan ' . ($opname->jobsite->code ?? '-') . '. Perlu mutasi / koreksi data.'],
-            default => ['type' => 'danger', 'title' => 'Tidak terdaftar', 'text' => "Kode \"{$code}\" tidak cocok dengan No. aset, No. aset lama, maupun SN mana pun."],
-        };
-        $this->dispatch('opname-feedback', type: $this->last['type']);
+        $this->dispatch('opname-feedback', type: $res['type']);
     }
 
     /** Ubah kondisi aset yang baru discan (baik / rusak). */
     public function setCondition($itemId, $condition)
     {
         $item = $this->editableItem($itemId);
-        if (!$item || !in_array($condition, ['baik', 'rusak'], true)) return;
-        $item->update(['condition' => $condition]);
+        if (!$item) return;
+        app(StockOpnameService::class)->setCondition($item, (string) $condition);
     }
 
     /**
@@ -195,10 +118,7 @@ class Session extends Component
         }
         $this->validate(['lastLocation' => 'string|max:255']);
 
-        $item->update(['location_note' => $loc]);
-        if ($item->asset && $item->result === 'found') {
-            $item->asset->update(['current_location_detail' => $loc]);
-        }
+        app(StockOpnameService::class)->saveLocation($item, $loc);
         $this->lastLocation = '';
         $this->dispatch('opname-location-saved', kept: false);
     }
@@ -206,17 +126,12 @@ class Session extends Component
     /** Item di sesi ini yang masih boleh diubah (sesi terbuka & aset terdaftar). */
     protected function editableItem($itemId): ?StockOpnameItem
     {
-        $opname = $this->opname();
-        if (!$opname->isOpen()) return null;
-
-        return StockOpnameItem::with('asset')->where('stock_opname_id', $opname->id)->whereNotNull('asset_id')->find($itemId);
+        return app(StockOpnameService::class)->editableItem($this->opname(), $itemId);
     }
 
     public function undo($itemId)
     {
-        $opname = $this->opname();
-        if (!$opname->isOpen()) return;
-        StockOpnameItem::where('stock_opname_id', $opname->id)->whereKey($itemId)->delete();
+        if (!app(StockOpnameService::class)->undo($this->opname(), $itemId)) return;
         if ((int) $this->lastItemId === (int) $itemId) {
             $this->lastItemId = null;
         }

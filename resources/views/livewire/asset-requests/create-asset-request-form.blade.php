@@ -49,7 +49,7 @@
                     </div>
 
                     {{-- Petunjuk sebelum 4 karakter --}}
-                    <small id="beneficiary-hint" class="d-block mt-1 text-muted" x-show="len > 0 && len < min" x-cloak aria-live="polite">
+                    <small id="beneficiary-hint" class="mt-1 text-muted" style="display: block" x-show="len > 0 && len < min" x-cloak aria-live="polite">
                         Ketik <span x-text="min - len"></span> karakter lagi untuk mulai mencari.
                     </small>
 

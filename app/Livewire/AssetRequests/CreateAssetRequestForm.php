@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\{Auth, DB, Log};
 use Livewire\WithFileUploads;
 use Livewire\Attributes\Locked;
+use App\Services\AssetRequestService;
 use Illuminate\Support\Facades\Storage;
 use Mail;
 class CreateAssetRequestForm extends Component
@@ -24,7 +25,7 @@ class CreateAssetRequestForm extends Component
     public $workflowWarning = null;
 
     /** Boleh mengajukan untuk karyawan lain di departemen yang sama. */
-    public const ON_BEHALF_PERMISSION = 'Ajukan Aset untuk Orang Lain';
+    public const ON_BEHALF_PERMISSION = AssetRequestService::ON_BEHALF_PERMISSION;
 
     /** Penerima aset bila mengajukan untuk orang lain (null = diri sendiri). Hanya diubah lewat selectBeneficiary(). */
     #[Locked]
@@ -40,30 +41,11 @@ class CreateAssetRequestForm extends Component
     }
     public function loadNeededAssetsForRequester()
     {
-        $this->items = []; // Kosongkan item
-        $user = $this->requester()->load('position.assetStandards', 'assetsHeld.assetSeries');
-
-        if (!$user || !$user->position) {
+        $user = $this->requester();
+        $this->items = app(AssetRequestService::class)->standardItems($user);
+        if (!$user->position) {
             $this->addItem();
-            return;
         }
-
-        $heldSeriesIds = $user->assetsHeld->whereNotNull('asset_series_id')->pluck('asset_series_id')->unique()->toArray();
-
-        foreach ($user->position->assetStandards as $standard) {
-            if ($standard->asset_series_id && !in_array($standard->asset_series_id, $heldSeriesIds)) {
-                $this->items[] = [
-                    'asset_type_id' => $standard->asset_type_id,
-                    'asset_brand_id' => $standard->asset_brand_id,
-                    'asset_series_id' => $standard->asset_series_id,
-                    'quantity' => $standard->quantity,
-                    'item_description' => $standard->specifications_notes,
-                    'is_standard' => true,
-                ];
-            }
-        }
-        if (empty($this->items))
-            ;//$this->addItem()
     }
 
     // ------------------------------------------------------------------
@@ -72,18 +54,13 @@ class CreateAssetRequestForm extends Component
 
     public function canSubmitForOthers(): bool
     {
-        $user = Auth::user();
-
-        return $user && $user->department_id && $user->can(self::ON_BEHALF_PERMISSION);
+        return AssetRequestService::canSubmitForOthers(Auth::user());
     }
 
     /** Karyawan aktif satu departemen dengan pengisi form (selain dirinya). */
     protected function eligibleBeneficiaries()
     {
-        return User::query()
-            ->where('department_id', Auth::user()->department_id)
-            ->where('id', '!=', Auth::id())
-            ->where('is_active', 1);
+        return AssetRequestService::eligibleBeneficiaries(Auth::user());
     }
 
     /**
@@ -92,14 +69,7 @@ class CreateAssetRequestForm extends Component
      */
     protected function requester(): User
     {
-        if ($this->forUserId && $this->canSubmitForOthers()) {
-            $user = $this->eligibleBeneficiaries()->find($this->forUserId);
-            if ($user) {
-                return $user;
-            }
-        }
-
-        return Auth::user();
+        return AssetRequestService::resolveRequester(Auth::user(), $this->forUserId) ?? Auth::user();
     }
 
     public function selectBeneficiary($userId)
@@ -208,128 +178,16 @@ class CreateAssetRequestForm extends Component
         $validatedData = $this->validate();
 
         try {
-
-            if ($this->ba_damage) {
-                $this->ba_damage_path = $this->ba_damage->store('request_asset/ba_damage', 'public');
-                $this->ba_damage_name = $this->ba_damage->getClientOriginalName();
-            } else {
-                $this->ba_damage_path = null;
-                $this->ba_damage_name = null;
-            }
-            if ($this->ba_budget_outside) {
-                // Hapus file lama jika ada saat proses update
-                $this->ba_budget_outside_path = $this->ba_budget_outside->store('request_asset/ba_budget_outside', 'public');
-                $this->ba_budget_outside_name = $this->ba_budget_outside->getClientOriginalName();
-            } else {
-                $this->ba_budget_outside_path = null;
-                $this->ba_budget_outside_name = null;
-            }
-            $assetRequest = DB::transaction(function () use ($validatedData, $requester) {
-
-                // 1. Simpan header
-                // $request = AssetRequest::create([
-                //     'request_number' => $this->generateRequestNumber(),
-                //     'requester_user_id' => $requester->id,
-                //     'jobsite_id' => $requester->jobsite_id,
-                //     'request_date' => now(),
-                //     'needed_date' => $this->needed_date,
-                //     'purpose' => $this->purpose,
-                //     'status' => 'Pending IT Item Validation',
-                //     'ba_damage_path' => $this->ba_damage_path,
-                //     'ba_damage_name' => $this->ba_damage_name,
-                //     'ba_budget_outside_path' => $this->ba_budget_outside_path,
-                //     'ba_budget_outside_name' => $this->ba_budget_outside_name,
-                // ]);
-                $request = AssetRequest::create([
-                    'request_number' => $this->generateRequestNumber($requester),
-                    'requester_user_id' => $requester->id,
-                    'submitted_by_user_id' => Auth::id(),
-                    'jobsite_id' => $requester->jobsite_id,
-                    'request_date' => now(),
-                    'needed_date' => $this->needed_date,
-                    'purpose' => $this->purpose,
-                    'status' => 'Pending IT Item Validation',
-                    'ba_damage_path' => $this->ba_damage_path,
-                    'ba_damage_name' => $this->ba_damage_name,
-                    'ba_budget_outside_path' => $this->ba_budget_outside_path,
-                    'ba_budget_outside_name' => $this->ba_budget_outside_name,
-                ]);
-
-                // 2. Simpan item detail (dipecah per unit: quantity N -> N baris dengan quantity 1)
-                foreach ($validatedData['items'] as $itemData) {
-
-                    $qty = (int) $itemData['quantity']; // jumlah yang diajukan
-
-                    // hapus qty asli supaya tidak double
-                    unset($itemData['quantity']);
-
-                    for ($i = 0; $i < $qty; $i++) {
-                        $request->items()->create(array_merge(
-                            $itemData,
-                            ['quantity' => 1]
-                        ));
-                    }
-                }
-                // 3. Workflow approval. Workflow belum diatur / approver tidak lengkap ->
-                //    WorkflowNotConfigured dan seluruh pengajuan di-rollback (tidak ada yang lolos tanpa approver).
-                $plan = \App\Support\Workflow::plan('REQUEST_ASSET', $requester->position_id, $requester->jobsite_id);
-                // Tahap yang approvernya = pemohon langsung disetujui otomatis.
-                $request->approvals()->createMany(\App\Support\Workflow::approvalRows($plan, $requester->id));
-
-                return $request;
-            });
-
-            // 4. Email ke pemohon/penerima, dan ke pengisi form bila diajukan atas nama orang lain.
-            $recipients = collect([$requester->karyawans->Email ?? null]);
-            if ((int) $requester->id !== (int) Auth::id()) {
-                $recipients->push(Auth::user()->karyawans->Email ?? null);
-            }
-            $recipients = $recipients->filter()->unique()->values();
-            if ($recipients->isNotEmpty()) {
-                try {
-                    Mail::Mailer('smtp2')->to($recipients->all())->send(new MailAssetRequest([
-                        'type' => 'SUBMIT',
-                        'author' => $requester->name,
-                        'draft' => $assetRequest,
-                    ]));
-                } catch (\Throwable $mailError) {
-                    Log::error('Gagal kirim email SUBMIT pengajuan aset: ' . $mailError->getMessage());
-                }
-            }
-
-            // 5. Kirim notifikasi ke approver pertama
-            // Approver pertama yang masih harus bertindak (tahap otomatis dilewati).
-            $firstApprover = $assetRequest->approvals()->where('status', 'Pending')->get()->sortBy('step_order')->first();
-            if ($firstApprover && $firstApprover->approver) {
-                 $approverData = [
-                    'type' => 'OUTSTANDING_APPROVER',
-                    'approver' => $firstApprover->approver->name,
-                    'draft' => $firstApprover
-                ];
-                $approverEmail = $firstApprover->approver->karyawans->Email ?? null;
-                if ($approverEmail) {
-                    try {
-                        Mail::Mailer('smtp2')->to($approverEmail)->send(new MailAssetRequest($approverData));
-                    } catch (\Throwable $mailError) {
-                        Log::error('Gagal kirim email approver pengajuan aset: ' . $mailError->getMessage());
-                    }
-                }
-            }
-
-            return redirect()
-                ->route('asset-requests.dashboard')
-                ->with('message', 'Pengajuan aset berhasil dibuat dan sedang menunggu persetujuan.');
-
+            app(AssetRequestService::class)->submit($requester, Auth::user(), $validatedData, $this->ba_damage ?: null, $this->ba_budget_outside ?: null);
         } catch (\Exception $e) {
-            // Pengajuan gagal: hapus file yang sudah terlanjur diupload.
-            foreach ([$this->ba_damage_path, $this->ba_budget_outside_path] as $uploaded) {
-                if ($uploaded) {
-                    Storage::disk('public')->delete($uploaded);
-                }
-            }
             Log::error('Gagal membuat pengajuan aset: ' . $e->getMessage());
             session()->flash('error', $e->getMessage());
+            return;
         }
+
+        return redirect()
+            ->route('asset-requests.dashboard')
+            ->with('message', 'Pengajuan aset berhasil dibuat dan sedang menunggu persetujuan.');
     }
     public function resetFormAndLoadStandards()
     {
@@ -479,17 +337,9 @@ class CreateAssetRequestForm extends Component
         }
     }
 
-    public function generateRequestNumber(?User $requester = null)
+    protected function generateRequestNumber(?User $requester = null)
     {
-        $jobsite = ($requester ?? $this->requester())->jobsite->code;
-        $prefix = "REQ/" . $jobsite . "/" . date('ym') . "/"; // Format REQ/2506/XXXX
-        $lastRequest = AssetRequest::where('request_number', 'LIKE', $prefix . '%')->orderByDesc('id')->first();
-        $nextSequence = 1;
-        if ($lastRequest) {
-            $lastSequence = (int) substr($lastRequest->request_number, -4);
-            $nextSequence = $lastSequence + 1;
-        }
-        return $prefix . str_pad($nextSequence, 4, '0', STR_PAD_LEFT);
+        return app(AssetRequestService::class)->generateRequestNumber($requester ?? $this->requester());
     }
 
     public function render()
