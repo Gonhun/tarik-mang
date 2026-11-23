@@ -115,6 +115,8 @@
     <!-- Main JS -->
     <script src="{{ asset('assets/js/main.js') }}"></script>
 
+    <!-- Widget form Alpine (dropdown berpencarian, scan kamera); harus sebelum Livewire memulai Alpine -->
+    <script src="{{ asset('assets/js/form-widgets.js') }}?v={{ filemtime(public_path('assets/js/form-widgets.js')) }}"></script>
     @livewireScripts
     @stack('scripts')
     @include('components.SweetAlert.swal')

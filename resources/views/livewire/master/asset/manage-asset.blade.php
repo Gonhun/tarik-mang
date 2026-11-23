@@ -362,16 +362,19 @@
                             <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="asset_type_id_modal_asset" class="form-label">Tipe Aset <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari tipe...">
                                     <select wire:model="asset_type_id" wire:change="changeAssetTypeId" id="asset_type_id_modal_asset" class="form-select @error('asset_type_id') is-invalid @enderror">
                                         <option value="">-- Pilih Tipe --</option>
                                         @foreach ($assetTypes as $type)
                                             <option value="{{ $type->id }}">{{ $type->name }} </option>
                                         @endforeach
                                     </select>
+                                    </x-search-select>
                                     @error('asset_type_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="asset_brand_id_modal_asset" class="form-label">Merek Aset <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari merek...">
                                     <select wire:model="asset_brand_id" wire:change="changeAssetBrandId" id="asset_brand_id_modal_asset" class="form-select @error('asset_brand_id') is-invalid @enderror" @if(count($assetBrands) == 0 && !$asset_type_id) disabled @endif>
                                         <option value="">-- Pilih Merek --</option>
                                         @if(count($assetBrands) > 0)
@@ -382,10 +385,12 @@
                                             <option value="" disabled>Tidak ada Type Asset</option>
                                         @endif
                                     </select>
+                                    </x-search-select>
                                     @error('asset_brand_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="asset_series_id_modal_asset" class="form-label">Seri Aset <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari seri...">
                                     <select wire:model.defer="asset_series_id" id="asset_series_id_modal_asset" class="form-select @error('asset_series_id') is-invalid @enderror" @if(count($assetSeriesCollection) == 0 && !$asset_brand_id) disabled @endif>
                                         <option value="">-- Pilih Seri --</option>
                                          @if(count($assetSeriesCollection) > 0)
@@ -396,6 +401,7 @@
                                             <option value="" disabled>Tidak ada Merek Aset</option>
                                         @endif
                                     </select>
+                                    </x-search-select>
                                     @error('asset_series_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                             </div>
@@ -410,19 +416,35 @@
                                     <input type="text" class="form-control @error('old_asset_number') is-invalid @enderror" id="old_asset_number_modal" wire:model.defer="old_asset_number">
                                     @error('old_asset_number') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
-                                <div class="col-md-4 mb-3">
+                                <div class="col-md-4 mb-3" x-data="cameraScan">
                                     <label for="serial_number_modal" class="form-label">Serial Number <span class="text-danger">*</span></label>
-                                    <input type="text" class="form-control @error('serial_number') is-invalid @enderror" id="serial_number_modal" wire:model.defer="serial_number">
+                                    <div class="input-group has-validation">
+                                        <input type="text" x-ref="input" class="form-control @error('serial_number') is-invalid @enderror" id="serial_number_modal" wire:model.defer="serial_number">
+                                        <button type="button" wire:ignore class="btn btn-outline-primary" @click="toggle()"
+                                                :title="scanning ? 'Tutup kamera' : 'Scan SN pakai kamera'"
+                                                :aria-label="scanning ? 'Tutup kamera' : 'Scan SN pakai kamera'">
+                                            <i class="bx" :class="scanning ? 'bx-x' : 'bx-barcode-reader'"></i>
+                                        </button>
+                                    </div>
                                     @error('serial_number') <span class="text-danger">{{ $message }}</span> @enderror
+                                    <div wire:ignore>
+                                        <div x-show="scanning" x-cloak class="mt-2">
+                                            <div :id="readerId" class="rounded overflow-hidden bg-dark"></div>
+                                            <small class="text-muted d-block mt-1">Arahkan kamera ke barcode / QR SN di perangkat.</small>
+                                        </div>
+                                        <div x-show="error" x-cloak x-text="error" class="alert alert-warning small py-2 mt-2 mb-0" role="alert"></div>
+                                    </div>
                                 </div>
                                 <div class="col-md-4 mb-3">
                                     <label for="entity_id_modal_asset" class="form-label">Entitas <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari entitas...">
                                     <select wire:model="entity_id" wire:change="numberAssetTemporarry" id="entity_id_modal_asset" class="form-select @error('entity_id') is-invalid @enderror">
                                         <option value="">-- Pilih Entitas --</option>
                                         @foreach ($entities as $entity)
                                             <option value="{{ $entity->id }}">{{ $entity->name }} ({{ $entity->code }})</option>
                                         @endforeach
                                     </select>
+                                    </x-search-select>
                                     @error('entity_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                             </div>
@@ -448,20 +470,24 @@
                              <div class="row">
                                 <div class="col-md-4 mb-3">
                                     <label for="jobsite_id_modal_asset" class="form-label">Jobsite <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari jobsite...">
                                     <select wire:model.live="jobsite_id" wire:change="numberAssetTemporarry" id="jobsite_id_modal_asset" class="form-select @error('jobsite_id') is-invalid @enderror">
                                         @foreach ($jobsites as $jobsite)
                                             <option value="{{ $jobsite->id }}">{{ $jobsite->name }} ({{ $jobsite->code }})</option>
                                         @endforeach
                                     </select>
+                                    </x-search-select>
                                     @error('jobsite_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="col-md-4 mb-3" >
                                     <label for="status_modal_departement" class="form-label">Asset Departement <span class="text-danger">*</span></label>
+                                    <x-search-select placeholder="Cari departemen...">
                                     <select wire:model.live="departement_id" id="status_modal_departement" class="form-select @error('departement_id') is-invalid @enderror">
                                         @foreach ($departements as $departement)
                                             <option value="{{ $departement->id }}">{{ $departement->name }} ({{ $departement->code }})</option>
                                         @endforeach
                                     </select>
+                                    </x-search-select>
                                     @error('departement_id') <span class="text-danger">{{ $message }}</span> @enderror
                                 </div>
                                 <div class="col-md-4 mb-3" >
@@ -516,4 +542,9 @@
     @livewire('modal.asset.disposal')
     @livewire('modal.asset.loan')
 </div>
+
+@assets
+    {{-- Pemindai kamera untuk kolom Serial Number (dipakai widget cameraScan). --}}
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+@endassets
 

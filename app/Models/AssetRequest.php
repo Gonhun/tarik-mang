@@ -16,6 +16,7 @@ class AssetRequest extends Model implements Auditable
     protected $fillable = [
         'request_number',
         'requester_user_id',
+        'submitted_by_user_id', // pengisi form bila mengajukan atas nama orang lain (null = pemohon sendiri)
         'jobsite_id',
         'request_date',
         'needed_date',
@@ -46,6 +47,20 @@ class AssetRequest extends Model implements Auditable
     public function requester(): BelongsTo
     {
         return $this->belongsTo(User::class, 'requester_user_id');
+    }
+
+    /**
+     * User yang mengisi form bila pengajuan dibuat atas nama orang lain (null = diajukan sendiri).
+     */
+    public function submitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by_user_id');
+    }
+
+    /** Diajukan oleh orang lain atas nama pemohon? */
+    public function isSubmittedOnBehalf(): bool
+    {
+        return $this->submitted_by_user_id && (int) $this->submitted_by_user_id !== (int) $this->requester_user_id;
     }
 
     /**

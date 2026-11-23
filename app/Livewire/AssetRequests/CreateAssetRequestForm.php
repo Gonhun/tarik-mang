@@ -10,6 +10,7 @@ use App\Models\{Asset, AssetBrand, AssetTransaction, AssetRequest, AssetRequestA
 use Carbon\Carbon;
 use Illuminate\Support\Facades\{Auth, DB, Log};
 use Livewire\WithFileUploads;
+use Livewire\Attributes\Locked;
 use Illuminate\Support\Facades\Storage;
 use Mail;
 class CreateAssetRequestForm extends Component
@@ -22,9 +23,17 @@ class CreateAssetRequestForm extends Component
     /** Pesan bila workflow pengajuan aset belum siap (form tidak bisa dikirim). */
     public $workflowWarning = null;
 
+    /** Boleh mengajukan untuk karyawan lain di departemen yang sama. */
+    public const ON_BEHALF_PERMISSION = 'Ajukan Aset untuk Orang Lain';
+
+    /** Penerima aset bila mengajukan untuk orang lain (null = diri sendiri). Hanya diubah lewat selectBeneficiary(). */
+    #[Locked]
+    public $forUserId = null;
+    public $beneficiarySearch = '';
+
     public function mount()
     {
-        $this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', Auth::user());
+        $this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', $this->requester());
         // Katalog tipe/merek/seri tidak disimpan di state (dimuat di render sesuai pilihan).
         $this->needed_date = Carbon::now()->addDays(14)->format('Y-m-d');
         $this->loadNeededAssetsForRequester();
@@ -32,7 +41,7 @@ class CreateAssetRequestForm extends Component
     public function loadNeededAssetsForRequester()
     {
         $this->items = []; // Kosongkan item
-        $user = Auth::user()->load('position.assetStandards', 'assetsHeld.assetSeries');
+        $user = $this->requester()->load('position.assetStandards', 'assetsHeld.assetSeries');
 
         if (!$user || !$user->position) {
             $this->addItem();
@@ -55,6 +64,68 @@ class CreateAssetRequestForm extends Component
         }
         if (empty($this->items))
             ;//$this->addItem()
+    }
+
+    // ------------------------------------------------------------------
+    // Mengajukan untuk orang lain
+    // ------------------------------------------------------------------
+
+    public function canSubmitForOthers(): bool
+    {
+        $user = Auth::user();
+
+        return $user && $user->department_id && $user->can(self::ON_BEHALF_PERMISSION);
+    }
+
+    /** Karyawan aktif satu departemen dengan pengisi form (selain dirinya). */
+    protected function eligibleBeneficiaries()
+    {
+        return User::query()
+            ->where('department_id', Auth::user()->department_id)
+            ->where('id', '!=', Auth::id())
+            ->where('is_active', 1);
+    }
+
+    /**
+     * Pemohon pada data pengajuan = penerima aset: karyawan yang dipilih, atau diri sendiri.
+     * Selalu dicek ulang (permission & departemen) agar tidak bisa dimanipulasi dari browser.
+     */
+    protected function requester(): User
+    {
+        if ($this->forUserId && $this->canSubmitForOthers()) {
+            $user = $this->eligibleBeneficiaries()->find($this->forUserId);
+            if ($user) {
+                return $user;
+            }
+        }
+
+        return Auth::user();
+    }
+
+    public function selectBeneficiary($userId)
+    {
+        $user = $this->canSubmitForOthers() ? $this->eligibleBeneficiaries()->find($userId) : null;
+        if (!$user) {
+            $this->dispatch('swal:error', ['title' => 'Tidak bisa dipilih', 'text' => 'Anda hanya bisa mengajukan untuk karyawan aktif di departemen Anda.']);
+            return;
+        }
+        $this->forUserId = $user->id;
+        $this->requesterChanged();
+    }
+
+    public function submitForSelf()
+    {
+        $this->forUserId = null;
+        $this->requesterChanged();
+    }
+
+    /** Ganti penerima: workflow & item standar mengikuti jabatan penerima. */
+    protected function requesterChanged(): void
+    {
+        $this->beneficiarySearch = '';
+        $this->resetValidation();
+        $this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', $this->requester());
+        $this->loadNeededAssetsForRequester();
     }
 
     public function addItem()
@@ -125,7 +196,12 @@ class CreateAssetRequestForm extends Component
     }
     public function submitRequest()
     {
-        if ($this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', Auth::user())) {
+        $requester = $this->requester();
+        if ($this->forUserId && (int) $requester->id !== (int) $this->forUserId) {
+            $this->dispatch('swal:error', ['title' => 'Penerima tidak valid', 'text' => 'Karyawan yang dipilih tidak lagi bisa diajukan atas nama Anda. Pilih ulang penerima.']);
+            return;
+        }
+        if ($this->workflowWarning = \App\Support\Workflow::problem('REQUEST_ASSET', $requester)) {
             $this->dispatch('swal:error', ['title' => 'Workflow belum siap', 'text' => $this->workflowWarning]);
             return;
         }
@@ -148,8 +224,7 @@ class CreateAssetRequestForm extends Component
                 $this->ba_budget_outside_path = null;
                 $this->ba_budget_outside_name = null;
             }
-            $assetRequest = DB::transaction(function () use ($validatedData) {
-                $requester = Auth::user();
+            $assetRequest = DB::transaction(function () use ($validatedData, $requester) {
 
                 // 1. Simpan header
                 // $request = AssetRequest::create([
@@ -166,8 +241,9 @@ class CreateAssetRequestForm extends Component
                 //     'ba_budget_outside_name' => $this->ba_budget_outside_name,
                 // ]);
                 $request = AssetRequest::create([
-                    'request_number' => $this->generateRequestNumber(),
+                    'request_number' => $this->generateRequestNumber($requester),
                     'requester_user_id' => $requester->id,
+                    'submitted_by_user_id' => Auth::id(),
                     'jobsite_id' => $requester->jobsite_id,
                     'request_date' => now(),
                     'needed_date' => $this->needed_date,
@@ -203,12 +279,15 @@ class CreateAssetRequestForm extends Component
                 return $request;
             });
 
-            // 4. Email ke requester (setelah data benar-benar tersimpan)
-            $requester = Auth::user();
-            $requesterEmail = $requester->karyawans->Email ?? null;
-            if ($requesterEmail) {
+            // 4. Email ke pemohon/penerima, dan ke pengisi form bila diajukan atas nama orang lain.
+            $recipients = collect([$requester->karyawans->Email ?? null]);
+            if ((int) $requester->id !== (int) Auth::id()) {
+                $recipients->push(Auth::user()->karyawans->Email ?? null);
+            }
+            $recipients = $recipients->filter()->unique()->values();
+            if ($recipients->isNotEmpty()) {
                 try {
-                    Mail::Mailer('smtp2')->to($requesterEmail)->send(new MailAssetRequest([
+                    Mail::Mailer('smtp2')->to($recipients->all())->send(new MailAssetRequest([
                         'type' => 'SUBMIT',
                         'author' => $requester->name,
                         'draft' => $assetRequest,
@@ -400,9 +479,9 @@ class CreateAssetRequestForm extends Component
         }
     }
 
-    public function generateRequestNumber()
+    public function generateRequestNumber(?User $requester = null)
     {
-        $jobsite = Auth::user()->jobsite->code;
+        $jobsite = ($requester ?? $this->requester())->jobsite->code;
         $prefix = "REQ/" . $jobsite . "/" . date('ym') . "/"; // Format REQ/2506/XXXX
         $lastRequest = AssetRequest::where('request_number', 'LIKE', $prefix . '%')->orderByDesc('id')->first();
         $nextSequence = 1;
@@ -415,7 +494,19 @@ class CreateAssetRequestForm extends Component
 
     public function render()
     {
-        $user = Auth::user()->loadMissing(['position.assetStandards.assetType:id,name', 'position.assetStandards.assetSeries:id,name', 'jobsite:id,code,name']);
+        $user = $this->requester()->loadMissing(['position.assetStandards.assetType:id,name', 'position.assetStandards.assetSeries:id,name', 'jobsite:id,code,name']);
+        $canSubmitForOthers = $this->canSubmitForOthers();
+
+        // Pencarian penerima (hanya karyawan aktif satu departemen).
+        $beneficiaryOptions = collect();
+        $term = trim($this->beneficiarySearch);
+        if ($canSubmitForOthers && mb_strlen($term) >= 4) {
+            $beneficiaryOptions = $this->eligibleBeneficiaries()
+                ->where(fn ($q) => $q->where('name', 'like', "%{$term}%")->orWhere('nik', 'like', "%{$term}%"))
+                ->with(['position:id,name', 'jobsite:id,code'])
+                ->orderBy('name')->limit(10)
+                ->get(['id', 'name', 'nik', 'position_id', 'jobsite_id']);
+        }
 
         // Katalog hanya yang relevan dengan pilihan saat ini.
         $typeIds = collect($this->items)->pluck('asset_type_id')->filter()->unique();
@@ -449,6 +540,10 @@ class CreateAssetRequestForm extends Component
             'totalUnits' => collect($this->items)->sum(fn ($i) => max(0, (int) ($i['quantity'] ?? 0))),
             'hasJobdesc' => !empty($user->position?->job_description_name),
             'user' => $user,
+            'forOther' => (int) $user->id !== (int) Auth::id(),
+            'canSubmitForOthers' => $canSubmitForOthers,
+            'beneficiaryOptions' => $beneficiaryOptions,
+            'myDepartment' => $canSubmitForOthers ? Auth::user()->department?->name : null,
         ]);
     }
 }

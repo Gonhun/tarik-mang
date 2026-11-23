@@ -338,3 +338,10 @@ nav[role="navigation"] p.small {
 /* Tombol ikon lama (btn-link di tabel). */
 .table .btn-link { padding: .25rem .4rem; text-decoration: none; }
 .table .btn-link:hover { background: rgba(var(--bs-primary-rgb), .08); border-radius: .375rem; }
+
+/* Alpine: sembunyikan elemen x-cloak sampai Alpine siap. */
+[x-cloak] { display: none !important; }
+
+/* Dropdown berpencarian (<x-search-select>). */
+.search-select .dropdown-menu { top: 100%; left: 0; margin-top: .125rem; }
+.search-select .dropdown-item.active { color: var(--bs-dropdown-link-active-color, #fff); }

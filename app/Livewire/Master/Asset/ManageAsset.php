@@ -347,6 +347,12 @@ class ManageAsset extends Component
 
     public function openModal()
     {
+        // Edit: pertahankan cost center yang tersimpan di aset. Cost center baru dihitung ulang
+        // hanya saat user mengganti Jobsite/Departemen (updatedJobsiteId / updatedDepartementId).
+        if ($this->isEdit && $this->cost_center_id) {
+            $this->isModalOpen = true;
+            return;
+        }
         $cc = CostCenter::where('department_id',$this->departement_id)
                 ->where('jobsite_id',$this->jobsite_id)
                 ->first(['id', 'cost_center_number']);
@@ -448,7 +454,8 @@ class ManageAsset extends Component
             // Validasi (kalau gagal akan otomatis tampil di Blade)
             $validatedData = $this->validate($this->rules());
             $dataToStore = $validatedData;
-            $dataToStore['department_id'] = Auth::user()->department_id; 
+            // Departemen yang dipilih di form (saat edit = departemen aset), bukan departemen user yang menyimpan.
+            $dataToStore['department_id'] = $this->departement_id ?: Auth::user()->department_id;
             $dataToStore['entity_id'] = $this->entity_id;
             
             if (!$this->asset_id) {
@@ -517,8 +524,10 @@ class ManageAsset extends Component
         $this->current_location_detail = $asset->current_location_detail;
         $this->holder_user_id = $asset->holder_user_id;
         $this->jobsite_id = $asset->jobsite_id;
+        // Departemen milik aset (bukan departemen user yang mengedit); fallback ke departemen cost center-nya.
+        $this->departement_id = $asset->department_id ?? $asset->costCenter?->department_id ?? Auth::user()->department_id;
         $this->cost_center_id = $asset->cost_center_id;
-        $this->cost_center = $asset->costCenter->cost_center_number;
+        $this->cost_center = $asset->costCenter?->cost_center_number;
 
         // Load dependent dropdowns
         $this->asset_type_id = $asset->asset_type_id;

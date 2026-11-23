@@ -48,6 +48,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             return (int) $request->requester_user_id === $user->id
+                || (int) $request->submitted_by_user_id === $user->id
                 || (int) $request->current_approver_id === $user->id
                 || $request->approvals()
                     ->where(fn ($q) => $q->where('approver_user_id', $user->id)->orWhere('action_by_user_id', $user->id))

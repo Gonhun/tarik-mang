@@ -4,12 +4,91 @@
         <div>
             <a href="{{ route('asset-requests.dashboard') }}" class="small text-muted"><i class="bx bx-chevron-left"></i>Pengajuan aset</a>
             <h4 class="mb-1 mt-1">Ajukan aset</h4>
-            <p class="text-muted mb-0">Item standar jabatan Anda sudah terisi otomatis. Lengkapi keperluan lalu kirim.</p>
+            <p class="text-muted mb-0">Item standar jabatan {{ $forOther ? $user->name : 'Anda' }} sudah terisi otomatis. Lengkapi keperluan lalu kirim.</p>
         </div>
     </div>
 
+    {{-- Ajukan untuk diri sendiri / karyawan lain satu departemen --}}
+    @if ($canSubmitForOthers)
+        <div class="card mb-4">
+            {{-- q = teks yang diketik; baru dikirim ke server setelah minimal 4 karakter. --}}
+            <div class="card-body" x-data="{ q: '', min: 4,
+                    get len() { return this.q.trim().length },
+                    push() { const v = this.len >= this.min ? this.q.trim() : ''; if (v !== this.$wire.beneficiarySearch) this.$wire.set('beneficiarySearch', v) } }">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="min-w-0">
+                        <span class="small text-muted d-block">Ajukan untuk</span>
+                        <span class="fw-semibold">{{ $user->name }}</span>
+                        <span class="text-muted small">· {{ $user->nik ?? '-' }} · {{ $user->position->name ?? 'Jabatan belum diatur' }} · {{ $user->jobsite->code ?? '-' }}</span>
+                        @if ($forOther)
+                            <span class="badge bg-label-info ms-1">Atas nama karyawan lain</span>
+                        @endif
+                    </div>
+                    @if ($forOther)
+                        <button type="button" wire:click="submitForSelf" @click="q = ''" wire:loading.attr="disabled" wire:target="submitForSelf" class="btn btn-sm btn-outline-secondary">
+                            <span wire:loading.remove wire:target="submitForSelf"><i class="bx bx-user me-1"></i></span>
+                            <span wire:loading wire:target="submitForSelf" class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            Ajukan untuk saya sendiri
+                        </button>
+                    @endif
+                </div>
+
+                <div class="mt-3 position-relative">
+                    <label for="beneficiary-search" class="form-label small mb-1">
+                        {{ $forOther ? 'Ganti penerima' : 'Ajukan untuk karyawan lain' }}
+                        <span class="text-muted">(departemen {{ $myDepartment ?? 'Anda' }})</span>
+                    </label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bx bx-search"></i></span>
+                        <input id="beneficiary-search" type="search" x-model="q" @input.debounce.400ms="push()" @search="push()"
+                               class="form-control" placeholder="Ketik nama atau NIK, minimal 4 karakter" autocomplete="off"
+                               aria-describedby="beneficiary-hint">
+                        <span class="input-group-text" wire:loading.flex wire:target="beneficiarySearch, selectBeneficiary" aria-hidden="true">
+                            <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                        </span>
+                    </div>
+
+                    {{-- Petunjuk sebelum 4 karakter --}}
+                    <small id="beneficiary-hint" class="d-block mt-1 text-muted" x-show="len > 0 && len < min" x-cloak aria-live="polite">
+                        Ketik <span x-text="min - len"></span> karakter lagi untuk mulai mencari.
+                    </small>
+
+                    {{-- Sedang mencari / memilih --}}
+                    <div class="list-group mt-1 shadow-sm" wire:loading.block wire:target="beneficiarySearch">
+                        <div class="list-group-item small text-muted d-flex align-items-center gap-2">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Mencari karyawan…
+                        </div>
+                    </div>
+                    <div class="list-group mt-1 shadow-sm" wire:loading.block wire:target="selectBeneficiary">
+                        <div class="list-group-item small text-muted d-flex align-items-center gap-2">
+                            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Memuat data penerima…
+                        </div>
+                    </div>
+
+                    @if (mb_strlen(trim($beneficiarySearch)) >= 4)
+                        <div class="list-group mt-1 shadow-sm" wire:loading.remove wire:target="beneficiarySearch, selectBeneficiary">
+                            @forelse ($beneficiaryOptions as $opt)
+                                <button type="button" wire:key="beneficiary-{{ $opt->id }}" wire:click="selectBeneficiary({{ $opt->id }})" @click="q = ''"
+                                        class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2">
+                                    <span class="min-w-0">
+                                        <span class="fw-medium">{{ $opt->name }}</span>
+                                        <small class="text-muted d-block">{{ $opt->nik ?? '-' }} · {{ $opt->position->name ?? 'Jabatan belum diatur' }}</small>
+                                    </span>
+                                    <span class="badge bg-label-secondary">{{ $opt->jobsite->code ?? '-' }}</span>
+                                </button>
+                            @empty
+                                <div class="list-group-item small text-muted">Tidak ada karyawan aktif di departemen Anda yang cocok.</div>
+                            @endforelse
+                        </div>
+                    @endif
+                    <small class="text-muted d-block mt-1">Item standar, nomor pengajuan, dan alur persetujuan mengikuti jabatan & site penerima. Aset nantinya diserahterimakan ke penerima.</small>
+                </div>
+            </div>
+        </div>
+    @endif
+
     @if (!$user->position)
-        <div class="alert alert-danger d-flex gap-2" role="alert"><i class="bx bx-error-alt fs-4"></i><div><strong>Jabatan Anda belum diatur.</strong> Hubungi tim IT/HR agar jabatan diisi sebelum mengajukan aset.</div></div>
+        <div class="alert alert-danger d-flex gap-2" role="alert"><i class="bx bx-error-alt fs-4"></i><div><strong>Jabatan {{ $forOther ? $user->name : 'Anda' }} belum diatur.</strong> Hubungi tim IT/HR agar jabatan diisi sebelum mengajukan aset.</div></div>
     @elseif (!$hasJobdesc)
         <div class="alert alert-danger d-flex gap-2" role="alert"><i class="bx bx-error-alt fs-4"></i><div><strong>Jobdesk jabatan {{ $user->position->name }} belum diunggah.</strong> Pengajuan aset memerlukan jobdesk jabatan. Hubungi tim IT/HR.</div></div>
     @elseif (empty($items))
@@ -19,7 +98,7 @@
                 <div class="d-flex gap-3 align-items-start">
                     <span class="avatar flex-shrink-0"><span class="avatar-initial rounded bg-label-success"><i class="bx bx-check-circle fs-4"></i></span></span>
                     <div>
-                        <h5 class="mb-1">Standar aset jabatan Anda sudah terpenuhi</h5>
+                        <h5 class="mb-1">Standar aset jabatan {{ $forOther ? $user->name : 'Anda' }} sudah terpenuhi</h5>
                         <p class="text-muted mb-3">Pengajuan aset mengikuti standar jabatan <strong>{{ $user->position->name }}</strong>. Saat ini tidak ada kebutuhan yang belum terpenuhi.</p>
                         @if ($standards->isNotEmpty())
                             <ul class="list-unstyled small mb-3">
@@ -28,7 +107,7 @@
                                 @endforeach
                             </ul>
                         @else
-                            <p class="small text-muted">Belum ada standar aset untuk jabatan ini. Hubungi tim IT bila Anda membutuhkan aset.</p>
+                            <p class="small text-muted">Belum ada standar aset untuk jabatan ini. Hubungi tim IT bila {{ $forOther ? 'karyawan ini' : 'Anda' }} membutuhkan aset.</p>
                         @endif
                         <div class="d-flex flex-wrap gap-2">
                             <a href="{{ route('my.asset') }}" class="btn btn-sm btn-outline-primary">Lihat aset saya</a>
@@ -212,7 +291,7 @@
                             <span wire:loading.remove wire:target="submitRequest"><i class="bx bx-send me-1"></i>Kirim pengajuan</span>
                             <span wire:loading wire:target="submitRequest"><span class="spinner-border spinner-border-sm me-1" role="status"></span>Mengirim...</span>
                         </button>
-                        <small class="d-block text-muted text-center mt-2">Anda akan menerima email konfirmasi.</small>
+                        <small class="d-block text-muted text-center mt-2">{{ $forOther ? 'Anda dan ' . $user->name . ' akan menerima email konfirmasi.' : 'Anda akan menerima email konfirmasi.' }}</small>
                     </div>
                 </div>
             </div>

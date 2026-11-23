@@ -123,14 +123,14 @@ class Dashboard extends Component
 
         $list = null;
         if ($this->tab !== 'action') {
-            $base = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where('requester_user_id', $user->id);
+            $base = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where(fn ($q) => $q->where('requester_user_id', $user->id)->orWhere('submitted_by_user_id', $user->id));
             $list = $this->applyFilters($base)
                 ->with($with)->withCount('items')
                 ->orderByDesc('request_date')->orderByDesc('id')
                 ->paginate(10);
         }
 
-        $statusSource = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where('requester_user_id', $user->id);
+        $statusSource = $this->tab === 'all' ? AssetRequest::query() : AssetRequest::where(fn ($q) => $q->where('requester_user_id', $user->id)->orWhere('submitted_by_user_id', $user->id));
         $statusCounts = $statusSource->select('status', DB::raw('count(*) as total'))->groupBy('status')->pluck('total', 'status');
 
         return view('livewire.asset-requests.dashboard', [

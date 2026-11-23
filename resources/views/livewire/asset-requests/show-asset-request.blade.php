@@ -17,6 +17,9 @@
             <p class="text-muted mb-0">
                 {{ $r->requester->name ?? '-' }} · {{ $r->requester->position->name ?? '-' }} · {{ $r->requester->department->code ?? '-' }} · {{ $r->jobsite->code ?? '-' }}
             </p>
+            @if ($r->isSubmittedOnBehalf())
+                <p class="small text-muted mb-0"><i class="bx bx-user-voice"></i> Diajukan oleh {{ $r->submitter->name ?? '-' }} atas nama {{ $r->requester->name ?? '-' }}</p>
+            @endif
         </div>
         <div class="d-flex flex-wrap align-items-center gap-2">
             <span class="badge bg-label-{{ $statusColor }} fs-6">{{ $stageLabel }}</span>
